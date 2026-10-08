@@ -66,8 +66,6 @@ async function openStore(userDataPath, initialStatePath) {
   db.run('CREATE TABLE IF NOT EXISTS app_state (id INTEGER PRIMARY KEY CHECK (id = 1), revision INTEGER NOT NULL, payload TEXT NOT NULL)');
   db.run('CREATE TABLE IF NOT EXISTS devices (id TEXT PRIMARY KEY, token_hash TEXT UNIQUE NOT NULL, name TEXT NOT NULL, created_at TEXT NOT NULL)');
   db.run('CREATE TABLE IF NOT EXISTS merchant_rules (merchant_key TEXT PRIMARY KEY, merchant TEXT NOT NULL, category_id TEXT NOT NULL)');
-  db.run('CREATE TABLE IF NOT EXISTS discord_batches (id TEXT PRIMARY KEY, channel_id TEXT NOT NULL, author_id TEXT NOT NULL, status TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL)');
-  db.run('CREATE TABLE IF NOT EXISTS discord_seen (message_id TEXT PRIMARY KEY)');
 
   function persist() {
     const temporary = dbPath + '.tmp';
@@ -196,116 +194,7 @@ async function openStore(userDataPath, initialStatePath) {
     persist();
   }
 
-  function batch(id) {
-    const stmt = db.prepare('SELECT id, channel_id, author_id, status, payload FROM discord_batches WHERE id = ?');
-    stmt.bind([id]);
-    const row = stmt.step() ? stmt.getAsObject() : null;
-    stmt.free();
-    return row ? { id: row.id, channelId: row.channel_id, authorId: row.author_id, status: row.status, rows: JSON.parse(row.payload) } : null;
-  }
-
-  function latestPendingBatch(channelId, authorId) {
-    const stmt = db.prepare("SELECT id FROM discord_batches WHERE channel_id = ? AND author_id = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1");
-    stmt.bind([channelId, authorId]);
-    const id = stmt.step() ? stmt.getAsObject().id : null;
-    stmt.free();
-    return id ? batch(id) : null;
-  }
-
-  function latestUsefulBatch(channelId, authorId) {
-    const stmt = db.prepare("SELECT id FROM discord_batches WHERE channel_id = ? AND author_id = ? AND status IN ('pending', 'committed') AND payload != '[]' ORDER BY created_at DESC LIMIT 1");
-    stmt.bind([channelId, authorId]);
-    const id = stmt.step() ? stmt.getAsObject().id : null;
-    stmt.free();
-    return id ? batch(id) : null;
-  }
-
-  function saveBatch(input) {
-    if (!/^\d{17,22}$/.test(input.id) || !/^\d{17,22}$/.test(input.channelId) || !/^\d{17,22}$/.test(input.authorId) || !Array.isArray(input.rows) || input.rows.length > 30) throw new Error('Lote inválido');
-    if (batch(input.id)) return batch(input.id);
-    db.run('INSERT INTO discord_batches VALUES (?, ?, ?, ?, ?, ?)', [input.id, input.channelId, input.authorId, 'pending', JSON.stringify(input.rows), new Date().toISOString()]);
-    persist();
-    return batch(input.id);
-  }
-
-  function updateBatch(id, rows, status = 'pending') {
-    if (!batch(id) || !Array.isArray(rows) || rows.length > 30 || !['pending', 'cancelled'].includes(status)) throw new Error('Lote inválido');
-    db.run('UPDATE discord_batches SET payload = ?, status = ? WHERE id = ?', [JSON.stringify(rows), status, id]);
-    persist();
-    return batch(id);
-  }
-
-  function applyDiscordPlan(batchId, plan, expectedRevision) {
-    const pending = batchId ? batch(batchId) : null;
-    if (batchId && (!pending || pending.status !== 'pending')) throw new Error('La propuesta ya no está pendiente');
-    if (!Array.isArray(plan.rows) || plan.rows.length > 30 || !Array.isArray(plan.createdCategories) || !Array.isArray(plan.rules)) throw new Error('Cambios de Discord inválidos');
-    const current = getState();
-    if (expectedRevision !== undefined && current.revision !== expectedRevision) throw new Error('Las categorías cambiaron mientras analizaba el mensaje. Repite la instrucción.');
-    const clean = validateState({ ...current.data, categories: plan.categories });
-    const validRules = validatedMerchantRules(plan.rules, clean.categories);
-    if (plan.createdCategories.length) backupDaily();
-    db.run('BEGIN TRANSACTION');
-    try {
-      if (plan.createdCategories.length) db.run('UPDATE app_state SET revision = ?, payload = ? WHERE id = 1', [current.revision + 1, JSON.stringify(clean)]);
-      if (pending) db.run('UPDATE discord_batches SET payload = ? WHERE id = ?', [JSON.stringify(plan.rows), batchId]);
-      for (const rule of validRules) db.run('INSERT OR REPLACE INTO merchant_rules VALUES (?, ?, ?)', [rule.key, rule.merchant, rule.categoryId]);
-      db.run('COMMIT');
-    } catch (error) { db.run('ROLLBACK'); throw error; }
-    persist();
-  }
-
-  function commitBatch(id) {
-    const currentBatch = batch(id);
-    if (!currentBatch || currentBatch.status !== 'pending') throw new Error('Este lote ya no está pendiente');
-    const createdAt = new Date().toISOString();
-    const current = getState();
-    const groups = new Map();
-    for (const row of currentBatch.rows) {
-      if (!row.adjustmentGroup) continue;
-      if (!groups.has(row.adjustmentGroup)) groups.set(row.adjustmentGroup, []);
-      groups.get(row.adjustmentGroup).push(row);
-    }
-    const updates = new Map();
-    for (const [groupId, rows] of groups) {
-      const sourceRows = rows.filter((row) => row.sourceTransactionId === groupId);
-      const source = current.data.transactions.find((item) => item.id === groupId);
-      const reference = sourceRows[0]?.sourceOriginal;
-      if (!source || sourceRows.length !== 1 || !reference || rows.some((row) => !row.include || row.kind !== source.kind || row.currency !== 'CLP' || row.date !== source.date || (row.sourceTransactionId && row.sourceTransactionId !== groupId))) throw new Error('La corrección guardada cambió. Cancélala y prepara una propuesta nueva.');
-      if (['amount', 'title', 'categoryId', 'date', 'kind'].some((key) => source[key] !== reference[key]) || rows.reduce((sum, row) => sum + row.amount, 0) !== source.amount) throw new Error('El gasto original cambió o las partes no suman el mismo total');
-      const edited = sourceRows[0];
-      updates.set(groupId, { ...source, amount: edited.amount, title: edited.title, categoryId: edited.categoryId });
-    }
-    const entries = currentBatch.rows.filter((row) => row.include === true && !row.sourceTransactionId).map((row) => ({
-      id: 'd' + crypto.randomUUID().replace(/-/g, ''), kind: row.kind, amount: row.amount, title: row.title,
-      categoryId: row.categoryId, date: row.date, createdAt, ...(row.time ? { note: 'Hora: ' + row.time } : {})
-    }));
-    const transactions = current.data.transactions.map((item) => updates.get(item.id) || item).concat(entries);
-    const clean = validateState({ ...current.data, transactions });
-    if (groups.size) backupNow(); else backupDaily();
-    db.run('BEGIN TRANSACTION');
-    try {
-      db.run('UPDATE app_state SET revision = ?, payload = ? WHERE id = 1', [current.revision + 1, JSON.stringify(clean)]);
-      db.run("UPDATE discord_batches SET status = 'committed' WHERE id = ?", [id]);
-      db.run('COMMIT');
-    } catch (error) { db.run('ROLLBACK'); throw error; }
-    persist();
-    return entries.length + updates.size;
-  }
-
-  function hasSeenDiscordMessage(id) {
-    const stmt = db.prepare('SELECT 1 FROM discord_seen WHERE message_id = ?');
-    stmt.bind([id]);
-    const found = stmt.step();
-    stmt.free();
-    return found;
-  }
-
-  function markDiscordMessageSeen(id) {
-    db.run('INSERT OR IGNORE INTO discord_seen VALUES (?)', [id]);
-    persist();
-  }
-
-  return { getState, saveState, restoreState, addDevice, deviceForToken, listDevices, revokeDevice, merchantRules, setMerchantRule, replaceMerchantRules, batch, latestPendingBatch, latestUsefulBatch, saveBatch, updateBatch, applyDiscordPlan, commitBatch, hasSeenDiscordMessage, markDiscordMessageSeen, backupDir, dbPath, backupNow, close: () => db.close() };
+  return { getState, saveState, restoreState, addDevice, deviceForToken, listDevices, revokeDevice, merchantRules, setMerchantRule, replaceMerchantRules, backupDir, dbPath, backupNow, close: () => db.close() };
 }
 
 module.exports = { openStore, validateState };

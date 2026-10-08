@@ -13,10 +13,11 @@ MiPlata es una aplicación de escritorio para Windows. Guarda los datos en SQLit
 MiPlata es un fork de [MisGastos](https://github.com/ValentinTarnovsky/MisGastos), creado por Valentin Tarnovsky y publicado con licencia MIT. Se basa en MisGastos 0.2.8 y cambia lo siguiente:
 
 - Logo propio: un signo $ verde con estrella, montañas y araucaria (fuente en `assets/miplata-logo.svg`).
-- Textos en español neutro (tú) en la app, la vinculación del iPhone y el bot de Discord.
-- Moneda principal en pesos chilenos (CLP), con formato `es-CL` y fecha del bot en hora de Chile (`America/Santiago`).
+- Textos en español neutro (tú) en la app y en la vinculación del iPhone.
+- Moneda principal en pesos chilenos (CLP), con formato `es-CL`.
 - Los campos de monto muestran el punto de miles mientras escribes (10.000, 1.000.000).
-- El bot de Discord lee los importes con formato chileno y entiende las órdenes con tú ("recuerda", "omite", "pon", "divide").
+- Estética verde menta en modo claro y oscuro, a juego con el logo.
+- Sin el bot de Discord del original: MiPlata no se conecta a Discord ni ejecuta Claude Code.
 - Si MisGastos estaba instalado, MiPlata copia sus datos en el primer inicio, sin borrar ni modificar los originales. También restaura copias JSON de MisGastos; los ahorros en ARS se leen como CLP.
 
 MiPlata usa el mismo puerto (`4174`) que MisGastos, así que no pueden estar abiertos al mismo tiempo. Si tenías MisGastos, desinstálalo después de comprobar que tus datos aparecen en MiPlata.
@@ -31,7 +32,6 @@ MiPlata usa el mismo puerto (`4174`) que MisGastos, así que no pueden estar abi
 - Cambiar entre tema claro y oscuro. La interfaz se adapta a PC e iPhone.
 - Exportar, restaurar y conservar copias locales automáticas.
 - Vincular un iPhone con un QR temporal, aprobarlo desde la PC y revocar el acceso cuando quieras.
-- Enviar capturas o mensajes a un bot privado de Discord, corregir su propuesta y confirmar un lote antes de guardarlo.
 
 ## Capturas
 
@@ -84,18 +84,6 @@ La primera apertura muestra la ventana. En los siguientes inicios de Windows, Mi
 5. Aprueba la solicitud que aparece en la PC. En Safari puedes usar **Compartir > Agregar a Inicio** para crear el acceso directo con el logo.
 
 El QR vence a los cinco minutos. Los celulares vinculados aparecen en **Ajustes** y se pueden revocar. El acceso móvil usa el servidor local de la PC en el puerto `4174`. No abras ese puerto a Internet; para acceder fuera de casa, usa Tailscale en ambos dispositivos. El iPhone accede mediante Safari, mientras que la aplicación instalada se ejecuta en Windows.
-
-## Registrar desde Discord
-
-1. Crea una aplicación y su bot en [Discord Developer Portal](https://discord.com/developers/applications). Activa **Message Content Intent** en la sección Bot.
-2. Invita el bot a un servidor privado con permisos para ver el canal elegido, leer el historial y enviar mensajes. Copia el ID de ese canal desde Discord con el modo desarrollador activado.
-3. Instala [Claude Code CLI](https://code.claude.com/docs/en/overview) en la PC e inicia sesión con tu cuenta de Claude. Comprueba que `claude -p --model claude-haiku-5-5 --effort low "Responde OK"` responda correctamente.
-4. En la app de Windows, abre **Ajustes > Discord > Configurar bot** y pega el token del bot y el ID del canal. Activa el bot y guarda.
-5. Manda una captura o un texto como `560 en Starbucks`. El bot te devuelve una propuesta. Puedes corregir varias filas juntas, por ejemplo `1 Ropa y nombre Costurera, 2 verdulería, 3 Otros ingresos y nombre Trabajo Pintura, ignora 4`. También puedes escribir `recuerda que Pepito Miguel es verdulero`, `crea una categoría Mascotas` o `divide la fila 1: $600 en Mascotas y el resto en Comida`. Si el gasto ya está guardado, indica el importe original: `Ayer registré $13.248 en Pedidos; descuéntale $3.500 y ponlos en Mascotas con nombre Comida`. El bot propone reducir el movimiento existente y crear la parte nueva; el total no cambia. Una división debe conservar el importe original; si falta información, el bot pregunta antes de cambiar nada. Para cargar un pago único de tarjeta que quedó excluido de una captura, escribe por ejemplo `Cuotas Mercado Pago $53.349 en Credito`. Escribe `mostrar` para revisar la propuesta pendiente y `guardar` para confirmar sus cambios.
-
-Solo el dueño del servidor puede darle instrucciones al bot, y solo en el canal configurado. La PC tiene que estar encendida y MiPlata activo en segundo plano. Al reconectarse, el bot revisa los 100 mensajes más recientes del canal. Las capturas y los mensajes se procesan con Claude Haiku 5.5 mediante Claude Code CLI, con esfuerzo bajo, y consumen el límite de uso de tu cuenta de Claude. El interruptor Fast mode de Claude Code no funciona con Haiku; solo está disponible para Opus. No se necesita una clave API. El token de Discord se cifra localmente en Windows y no se exporta. Las reglas aprendidas sí se guardan en SQLite y en las copias JSON. Las categorías nuevas aparecen en la app y las divisiones se aplican a propuestas pendientes antes de guardar.
-
-Los cargos en USD y las filas que parezcan de tarjeta de crédito quedan fuera de la propuesta por defecto. Los importes en CLP se redondean al peso más cercano para respetar el formato actual de MiPlata. Revisa la propuesta antes de confirmar, especialmente en transferencias e ingresos de origen incierto.
 
 ## Datos y copias
 

@@ -1,10 +1,8 @@
-const { app, BrowserWindow, Menu, Tray, nativeImage, dialog, shell, safeStorage } = require('electron');
+const { app, BrowserWindow, Menu, Tray, nativeImage, dialog, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { openStore } = require('./store.cjs');
 const { startServer, PORT } = require('./server.cjs');
-const { createDiscordConfig } = require('./discord-config.cjs');
-const { createDiscordBot } = require('./discord-bot.cjs');
 const { createDiagnosticLog } = require('./diagnostic-log.cjs');
 
 app.setName('MiPlata');
@@ -16,7 +14,6 @@ let mainWindow = null;
 let tray = null;
 let server = null;
 let store = null;
-let discordBot = null;
 let quitting = false;
 let shutdownReason = 'app_quit';
 let diagnosticLog = null;
@@ -99,7 +96,7 @@ app.on('child-process-gone', (_event, details) => {
 // En el primer inicio, trae los datos de MisGastos si estaba instalado (no borra ni cambia el original).
 function importMisGastosData(userData) {
   const previous = path.join(app.getPath('appData'), 'MisGastos');
-  const files = [['misgastos.sqlite', 'miplata.sqlite'], ['discord-config.json', 'discord-config.json']];
+  const files = [['misgastos.sqlite', 'miplata.sqlite']];
   if (fs.existsSync(path.join(userData, 'miplata.sqlite')) || !fs.existsSync(path.join(previous, 'misgastos.sqlite'))) return false;
   fs.mkdirSync(userData, { recursive: true });
   for (const [from, to] of files) {
@@ -118,14 +115,10 @@ if (singleInstance) app.whenReady().then(async () => {
     captureErrors(diagnosticLog);
     if (importMisGastosData(userData)) diagnosticLog.write('info', 'misgastos_data_imported', {});
     store = await openStore(userData, path.join(root, 'initial-state.json'));
-    const discordConfig = createDiscordConfig(userData, safeStorage);
-    discordBot = createDiscordBot(store, discordConfig, (status, detail) => {
-      diagnosticLog.write(status === 'error' ? 'error' : 'info', 'discord_status', { status, detail });
-    });
     const started = await startServer(store, root, () => {
       showWindow();
       if (mainWindow) mainWindow.webContents.executeJavaScript('window.MISGASTOS_PENDING && window.MISGASTOS_PENDING()').catch(() => {});
-    }, discordBot, discordConfig);
+    });
     server = started.server;
     server.on('error', (error) => diagnosticLog.error('http_server_error', error));
     createWindow();
@@ -134,7 +127,6 @@ if (singleInstance) app.whenReady().then(async () => {
     tray.setToolTip('MiPlata');
     tray.on('click', () => showWindow());
     trayMenu();
-    discordBot.start().catch((error) => console.error('No se pudo iniciar Discord:', error));
     setupLogin();
     trayMenu();
     diagnosticLog.write('info', 'app_ready', { port: PORT });
@@ -149,7 +141,6 @@ if (singleInstance) app.whenReady().then(async () => {
 app.on('before-quit', () => {
   quitting = true;
   try {
-    if (discordBot) discordBot.stop();
     if (server) server.close();
     if (store) store.close();
   } finally {

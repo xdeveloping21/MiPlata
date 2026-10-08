@@ -604,9 +604,6 @@ button.breakdown-detail-row:hover, button.breakdown-detail-row:focus-visible { b
 .text-input { padding: 0 13px; outline: none; }
 .text-input:focus, .amount-input:focus-within { border-color: var(--lavender); }
 .text-input::placeholder, .amount-input input::placeholder { color: var(--text-faint); }
-.discord-toggle { display: flex; align-items: center; gap: 10px; color: var(--text); font-size: 13px; font-weight: 700; margin: 0 0 12px; cursor: pointer; }
-.discord-toggle input { width: 18px; height: 18px; accent-color: var(--lavender); }
-.discord-dialog .settings-note { margin: 0 0 18px; line-height: 1.55; font-size: 12px; }
 .field-optional { color: var(--text-faint); font-weight: 600; }
 .description-autocomplete { position: relative; }
 .description-suggestions { position: absolute; top: calc(100% - 13px); left: 0; right: 0; z-index: 50; display: grid; gap: 2px; max-height: 230px; overflow-y: auto; padding: 6px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: 0 16px 40px rgba(20, 20, 40, .2); }

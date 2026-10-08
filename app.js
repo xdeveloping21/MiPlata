@@ -152,7 +152,7 @@ let stateRevision = 0;
 let saveQueue = Promise.resolve();
 let savesPending = 0;
 let saveGeneration = 0;
-let desktopInfo = { networks: [], devices: [], pending: [], backupDir: '', discord: { enabled: false, status: 'desconectado', channelId: '', hasBotToken: false } };
+let desktopInfo = { networks: [], devices: [], pending: [], backupDir: '' };
 let pairingInfo = null;
 let selectedNetwork = '';
 let restoreCandidate = null;
@@ -703,14 +703,11 @@ function renderSettings() {
     }).join('');
     return pageHeader('PREFERENCIAS', 'Ajustes', 'Tu dinero y tus dispositivos, bajo tu control.', '') +
       '<div class="settings-grid"><section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('sun', 20) + '</span><div><h2>Apariencia</h2><p>Elige cómo quieres ver MiPlata.</p></div></div>' +
-        '<div class="theme-options"><button type="button" data-theme-option="light" class="theme-option' + (data.theme === 'light' ? ' selected' : '') + '"><span class="theme-swatch light-swatch"></span><span><strong>Claro</strong><small>Marfil y colores suaves</small></span>' + (data.theme === 'light' ? icon('check', 18) : '') + '</button>' +
-        '<button type="button" data-theme-option="dark" class="theme-option' + (data.theme === 'dark' ? ' selected' : '') + '"><span class="theme-swatch dark-swatch"></span><span><strong>Oscuro</strong><small>Grafito y contraste sereno</small></span>' + (data.theme === 'dark' ? icon('check', 18) : '') + '</button></div></section>' +
+        '<div class="theme-options"><button type="button" data-theme-option="light" class="theme-option' + (data.theme === 'light' ? ' selected' : '') + '"><span class="theme-swatch light-swatch"></span><span><strong>Claro</strong><small>Blanco y verde menta</small></span>' + (data.theme === 'light' ? icon('check', 18) : '') + '</button>' +
+        '<button type="button" data-theme-option="dark" class="theme-option' + (data.theme === 'dark' ? ' selected' : '') + '"><span class="theme-swatch dark-swatch"></span><span><strong>Oscuro</strong><small>Verde oscuro y contraste suave</small></span>' + (data.theme === 'dark' ? icon('check', 18) : '') + '</button></div></section>' +
       '<section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('wallet', 20) + '</span><div><h2>Saldo inicial</h2><p>' + money(data.openingBalance) + '</p></div></div><button class="setting-action" data-action="edit-opening-balance" type="button"><span>' + icon('edit', 18) + ' Cambiar saldo inicial</span>' + icon('arrowRight', 18) + '</button></section>' +
       '<section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('phone', 20) + '</span><div><h2>Tu iPhone</h2><p>' + (DESKTOP ? 'Vincula y revoca dispositivos desde esta PC.' : 'Este celular está vinculado a tu PC.') + '</p></div></div>' +
         (DESKTOP ? '<button class="setting-action" data-action="show-qr" type="button"><span>' + icon('qr', 18) + ' Conectar iPhone con QR</span>' + icon('arrowRight', 18) + '</button>' + (devices || '<p class="settings-note">Todavía no hay celulares vinculados.</p>') : '') + '</section>' +
-      (DESKTOP ? '<section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('sparkles', 20) + '</span><div><h2>Discord</h2><p>Manda capturas o mensajes y revisa la propuesta antes de guardar.</p></div></div>' +
-        '<button class="setting-action" data-action="discord-config" type="button"><span>' + icon('edit', 18) + ' Configurar bot</span>' + icon('arrowRight', 18) + '</button>' +
-        '<p class="settings-note">Estado: ' + escapeHtml(desktopInfo.discord?.status || 'desconectado') + (desktopInfo.discord?.detail ? ' · ' + escapeHtml(desktopInfo.discord.detail) : '') + '</p></section>' : '') +
       (DESKTOP ? '<section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('download', 20) + '</span><div><h2>Copias de seguridad</h2><p>Se guarda una copia local diaria cuando cambias datos.</p></div></div>' +
         '<button class="setting-action" data-action="export-data" type="button"><span>' + icon('download', 18) + ' Exportar mis datos</span>' + icon('arrowRight', 18) + '</button>' +
         '<button class="setting-action" data-action="restore-data" type="button"><span>' + icon('reset', 18) + ' Restaurar una copia</span>' + icon('arrowRight', 18) + '</button><input id="restore-file" type="file" accept=".json,application/json" hidden />' +
@@ -718,8 +715,8 @@ function renderSettings() {
   }
   return pageHeader('PREFERENCIAS', 'Ajustes', 'Personaliza esta vista previa y prueba el enlace con tu iPhone.', '') +
     '<div class="settings-grid"><section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('sun', 20) + '</span><div><h2>Apariencia</h2><p>Elige cómo quieres ver MiPlata.</p></div></div>' +
-      '<div class="theme-options"><button type="button" data-theme-option="light" class="theme-option' + (data.theme === 'light' ? ' selected' : '') + '"><span class="theme-swatch light-swatch"></span><span><strong>Claro</strong><small>Marfil y colores suaves</small></span>' + (data.theme === 'light' ? icon('check', 18) : '') + '</button>' +
-      '<button type="button" data-theme-option="dark" class="theme-option' + (data.theme === 'dark' ? ' selected' : '') + '"><span class="theme-swatch dark-swatch"></span><span><strong>Oscuro</strong><small>Grafito y contraste sereno</small></span>' + (data.theme === 'dark' ? icon('check', 18) : '') + '</button></div></section>' +
+      '<div class="theme-options"><button type="button" data-theme-option="light" class="theme-option' + (data.theme === 'light' ? ' selected' : '') + '"><span class="theme-swatch light-swatch"></span><span><strong>Claro</strong><small>Blanco y verde menta</small></span>' + (data.theme === 'light' ? icon('check', 18) : '') + '</button>' +
+      '<button type="button" data-theme-option="dark" class="theme-option' + (data.theme === 'dark' ? ' selected' : '') + '"><span class="theme-swatch dark-swatch"></span><span><strong>Oscuro</strong><small>Verde oscuro y contraste suave</small></span>' + (data.theme === 'dark' ? icon('check', 18) : '') + '</button></div></section>' +
     '<section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('phone', 20) + '</span><div><h2>Tu iPhone</h2><p>' + (data.linked ? 'iPhone vinculado en esta demostración.' : 'Prueba cómo sería el primer enlace por QR.') + '</p></div></div>' +
       '<button class="setting-action" data-action="open-pair" type="button"><span>' + icon('qr', 18) + ' Ver flujo de vinculación</span>' + icon('arrowRight', 18) + '</button>' +
       '<button class="setting-action" data-action="show-qr" type="button"><span>' + icon('phone', 18) + ' Ver QR en la PC</span>' + icon('arrowRight', 18) + '</button></section>' +
@@ -885,18 +882,6 @@ function confirmationModal() {
     '<p class="confirm-description" id="confirm-description">' + description + '</p><div class="dialog-actions confirm-actions"><button class="button button-outline" data-action="cancel-confirm" type="button">Cancelar</button><button class="button button-danger" data-action="confirm-action" type="button">' + actionLabel + '</button></div></div>';
 }
 
-function discordModal() {
-  const settings = desktopInfo.discord || {};
-  return '<div class="modal-backdrop" data-action="close-modal"></div><div class="dialog discord-dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">' +
-    '<div class="dialog-head"><div><p class="eyebrow">CARGA RÁPIDA</p><h2 id="dialog-title">Bot de Discord</h2></div><button class="icon-button" data-action="close-modal" type="button" aria-label="Cerrar">' + icon('close', 20) + '</button></div>' +
-    '<p class="settings-note">Usa un canal privado del servidor MiPlata. El bot solo leerá ese canal y solo aceptará mensajes del dueño del servidor.</p>' +
-    '<form id="discord-form"><label class="field-label" for="discord-channel">ID del canal</label><input class="text-input" id="discord-channel" name="channelId" inputmode="numeric" value="' + escapeHtml(settings.channelId || '') + '" placeholder="Copiar ID del canal en Discord" required />' +
-    '<label class="field-label" for="discord-token">Token del bot</label><input class="text-input" id="discord-token" name="botToken" type="password" autocomplete="off" placeholder="' + (settings.hasBotToken ? 'Guardado. Dejar vacío para conservarlo' : 'Pega el token del bot') + '" />' +
-    '<label class="discord-toggle"><input name="enabled" type="checkbox"' + (settings.enabled ? ' checked' : '') + ' /> Activar bot al iniciar MiPlata</label>' +
-    '<p class="settings-note">El bot usa Claude Haiku 5.5 mediante Claude Code CLI en esta PC, con esfuerzo bajo. Consume el límite de uso de tu cuenta de Claude, sin clave API. El token de Discord se cifra en Windows y no se exporta.</p>' +
-    '<div class="dialog-actions"><button class="button button-outline" type="button" data-action="close-modal">Cancelar</button><button class="button button-primary" type="submit">Guardar conexión</button></div></form></div>';
-}
-
 function mergeConceptsModal() {
   const category = categoryById(modal.categoryId);
   const groups = conceptGroups(modal.categoryId).sort(function (a, b) { return a.title.localeCompare(b.title, 'es-CL'); });
@@ -936,7 +921,6 @@ function renderModal() {
   if (modal.type === 'merge-concepts') return mergeConceptsModal();
   if (modal.type === 'savings') return savingsModal();
   if (modal.type === 'category') return categoryModal();
-  if (modal.type === 'discord') return discordModal();
   if (modal.type === 'qr') return qrModal();
   if (modal.type === 'balance') return '<div class="modal-backdrop" data-action="close-modal"></div><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title"><div class="dialog-head"><div><p class="eyebrow">TUS DATOS</p><h2 id="dialog-title">Saldo inicial</h2></div><button class="icon-button" data-action="close-modal" type="button" aria-label="Cerrar">' + icon('close', 20) + '</button></div><form id="balance-form"><p class="savings-form-note">El saldo actual suma tus movimientos a este importe.</p><label class="field-label" for="opening-balance">Saldo inicial en pesos</label><div class="amount-input"><span>$</span><input id="opening-balance" name="balance" type="text" inputmode="numeric" autocomplete="off" data-amount-input data-amount-negative value="' + formatAmountValue(data.openingBalance) + '" required /></div><div class="dialog-actions"><button class="button button-outline" type="button" data-action="close-modal">Cancelar</button><button class="button button-primary" type="submit">Guardar saldo</button></div></form></div>';
   if (modal.type === 'confirmation') return confirmationModal();
@@ -1255,7 +1239,6 @@ document.addEventListener('click', function (event) {
       if (LIVE && DESKTOP) refreshDesktopInfo(false).then(function () { startPairing(selectedNetwork); });
       break;
     case 'edit-opening-balance': modal = { type: 'balance' }; render(); break;
-    case 'discord-config': if (LIVE && DESKTOP) { modal = { type: 'discord' }; render(); } break;
     case 'export-data': if (LIVE && DESKTOP) { window.location.href = '/api/export'; toast('Descargando tu copia de seguridad'); } break;
     case 'restore-data': if (LIVE && DESKTOP) document.getElementById('restore-file')?.click(); break;
     case 'reload-app': window.location.reload(); break;
@@ -1370,12 +1353,7 @@ document.addEventListener('change', async function (event) {
 });
 
 document.addEventListener('submit', function (event) {
-  if (event.target.id === 'discord-form') {
-    event.preventDefault();
-    const form = new FormData(event.target);
-    const payload = { channelId: String(form.get('channelId') || '').trim(), botToken: String(form.get('botToken') || ''), enabled: form.has('enabled') };
-    apiPost('/api/discord/config', payload).then(function (result) { desktopInfo.discord = result; modal = null; render(); toast(result.status === 'conectado' ? 'Bot conectado' : 'Configuración guardada'); }).catch(function (error) { toast(error.message); });
-  } else if (event.target.id === 'merge-concepts-form') {
+  if (event.target.id === 'merge-concepts-form') {
     event.preventDefault();
     const form = new FormData(event.target);
     const source = String(form.get('source') || '');
@@ -1594,7 +1572,7 @@ async function refreshDesktopInfo(openApproval) {
     desktopInfo = next;
     if (!selectedNetwork && next.networks.length) selectedNetwork = next.networks[0].address;
     if (openApproval && next.pending.length && !modal) modal = { type: 'qr' };
-    if (changed && modal?.type !== 'discord' && (route === 'settings' || modal?.type === 'qr' || openApproval)) render();
+    if (changed && (route === 'settings' || modal?.type === 'qr' || openApproval)) render();
   } catch (error) { console.warn('No se pudo actualizar la vinculación', error); }
 }
 

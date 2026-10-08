@@ -17,7 +17,6 @@
     "build:release": "electron-builder --win nsis"
   },
   "dependencies": {
-    "discord.js": "^14.27.0",
     "qrcode": "1.5.4",
     "sql.js": "1.14.2"
   },
