@@ -23,7 +23,7 @@ function claudeExecutable() {
 }
 
 async function runClaude(schema, prompt, images = []) {
-  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'misgastos-claude-'));
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'miplata-claude-'));
   try {
     const content = images.map((image) => {
       if (!['image/png', 'image/jpeg', 'image/webp'].includes(image.mime) || !Buffer.isBuffer(image.bytes)) throw new Error('Formato de captura no válido');
@@ -177,7 +177,7 @@ const correctionSchema = {
 
 async function interpretCorrections({ message, batch, categories, history = [], runStructured = runClaude }) {
   const prompt = [
-    'Eres el intérprete de instrucciones del dueño de MisGastos. Interpreta TODAS las acciones del mensaje actual sobre la propuesta pendiente, usando los mensajes recientes para resolver referencias como "ese", "el de arriba", "lo que te dije" o "divídelo". El mensaje actual tiene prioridad. No inventes una referencia si hay varias filas posibles: haz una pregunta concreta en clarification y devuelve edits=[].',
+    'Eres el intérprete de instrucciones del dueño de MiPlata. Interpreta TODAS las acciones del mensaje actual sobre la propuesta pendiente, usando los mensajes recientes para resolver referencias como "ese", "el de arriba", "lo que te dije" o "divídelo". El mensaje actual tiene prioridad. No inventes una referencia si hay varias filas posibles: haz una pregunta concreta en clarification y devuelve edits=[].',
     'Devuelve una edición por cada fila mencionada, incluso si el usuario escribe varias instrucciones breves como "1 ropa 2 verdulería 3 ingreso extra ponle Trabajo Pintura". No te quedes solo con la primera.',
     'Cada edición usa los campos indicados. Para campos no aplicables: null, false o parts=[]. index es el número de fila (1 en adelante), o 0 para create_category y remember.',
     'action=update puede cambiar categoría y título juntos. categoryId=null y categoryName=null conservan la categoría; title=null conserva el título.',

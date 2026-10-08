@@ -1,6 +1,6 @@
 {
-  "name": "MisGastos",
-  "short_name": "MisGastos",
+  "name": "MiPlata",
+  "short_name": "MiPlata",
   "description": "Tus movimientos y ahorros en un solo lugar.",
   "start_url": "/",
   "scope": "/",

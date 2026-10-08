@@ -7,8 +7,8 @@ const { createDiscordConfig } = require('./discord-config.cjs');
 const { createDiscordBot } = require('./discord-bot.cjs');
 const { createDiagnosticLog } = require('./diagnostic-log.cjs');
 
-app.setName('MisGastos');
-app.setAppUserModelId('ar.misgastos.app');
+app.setName('MiPlata');
+app.setAppUserModelId('cl.miplata.app');
 const singleInstance = app.requestSingleInstanceLock();
 if (!singleInstance) app.quit();
 
@@ -58,7 +58,7 @@ function setupLogin() {
 function trayMenu() {
   const auto = app.isPackaged && process.platform === 'win32' && app.getLoginItemSettings({ path: process.execPath, args: ['--hidden'] }).openAtLogin;
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'Abrir MisGastos', click: () => showWindow() },
+    { label: 'Abrir MiPlata', click: () => showWindow() },
     { label: 'Conectar iPhone', click: () => showWindow(true) },
     { type: 'separator' },
     { label: 'Iniciar con Windows', type: 'checkbox', checked: Boolean(auto), enabled: app.isPackaged && process.platform === 'win32', click: (item) => { loginSettings(item.checked); trayMenu(); } },
@@ -69,13 +69,13 @@ function trayMenu() {
 }
 
 function createWindow() {
-  const icon = path.join(root, 'assets', 'misgastos-logo.png');
+  const icon = path.join(root, 'assets', 'miplata-logo.png');
   mainWindow = new BrowserWindow({
     width: 1180,
     height: 820,
     minWidth: 720,
     minHeight: 560,
-    title: 'MisGastos',
+    title: 'MiPlata',
     icon,
     show: false,
     backgroundColor: '#f6f4f0',
@@ -96,12 +96,27 @@ app.on('child-process-gone', (_event, details) => {
   if (details.reason !== 'clean-exit') diagnosticLog?.write('error', 'child_process_gone', { type: details.type, reason: details.reason, exitCode: details.exitCode });
 });
 
+// En el primer inicio, trae los datos de MisGastos si estaba instalado (no borra ni cambia el original).
+function importMisGastosData(userData) {
+  const previous = path.join(app.getPath('appData'), 'MisGastos');
+  const files = [['misgastos.sqlite', 'miplata.sqlite'], ['discord-config.json', 'discord-config.json']];
+  if (fs.existsSync(path.join(userData, 'miplata.sqlite')) || !fs.existsSync(path.join(previous, 'misgastos.sqlite'))) return false;
+  fs.mkdirSync(userData, { recursive: true });
+  for (const [from, to] of files) {
+    const source = path.join(previous, from);
+    const target = path.join(userData, to);
+    if (fs.existsSync(source) && !fs.existsSync(target)) fs.copyFileSync(source, target);
+  }
+  return true;
+}
+
 if (singleInstance) app.whenReady().then(async () => {
   try {
     const userData = app.getPath('userData');
     diagnosticLog = createDiagnosticLog(userData);
     diagnosticLog.start(app.getVersion());
     captureErrors(diagnosticLog);
+    if (importMisGastosData(userData)) diagnosticLog.write('info', 'misgastos_data_imported', {});
     store = await openStore(userData, path.join(root, 'initial-state.json'));
     const discordConfig = createDiscordConfig(userData, safeStorage);
     discordBot = createDiscordBot(store, discordConfig, (status, detail) => {
@@ -114,9 +129,9 @@ if (singleInstance) app.whenReady().then(async () => {
     server = started.server;
     server.on('error', (error) => diagnosticLog.error('http_server_error', error));
     createWindow();
-    const icon = nativeImage.createFromPath(path.join(root, 'assets', 'misgastos-logo.png')).resize({ width: 20, height: 20 });
+    const icon = nativeImage.createFromPath(path.join(root, 'assets', 'miplata-logo.png')).resize({ width: 20, height: 20 });
     tray = new Tray(icon);
-    tray.setToolTip('MisGastos');
+    tray.setToolTip('MiPlata');
     tray.on('click', () => showWindow());
     trayMenu();
     discordBot.start().catch((error) => console.error('No se pudo iniciar Discord:', error));
@@ -125,8 +140,8 @@ if (singleInstance) app.whenReady().then(async () => {
     diagnosticLog.write('info', 'app_ready', { port: PORT });
   } catch (error) {
     shutdownReason = 'startup_error';
-    console.error('No se pudo iniciar MisGastos:', error);
-    dialog.showErrorBox('MisGastos no pudo iniciarse', error.message + '\n\nSi el puerto 4174 está ocupado, cierra la otra instancia.');
+    console.error('No se pudo iniciar MiPlata:', error);
+    dialog.showErrorBox('MiPlata no pudo iniciarse', error.message + '\n\nSi el puerto 4174 está ocupado, cierra la otra instancia.');
     app.quit();
   }
 });

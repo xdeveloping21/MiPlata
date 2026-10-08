@@ -58,7 +58,7 @@ function validateState(state) {
 
 async function openStore(userDataPath, initialStatePath) {
   fs.mkdirSync(userDataPath, { recursive: true });
-  const dbPath = path.join(userDataPath, 'misgastos.sqlite');
+  const dbPath = path.join(userDataPath, 'miplata.sqlite');
   const backupDir = path.join(userDataPath, 'backups');
   fs.mkdirSync(backupDir, { recursive: true });
   const SQL = await initSqlJs({ locateFile: (file) => require.resolve('sql.js/dist/' + file) });

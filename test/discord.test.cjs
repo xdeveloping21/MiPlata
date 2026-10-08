@@ -13,7 +13,7 @@ const { createDiscordConfig } = require('../desktop/discord-config.cjs');
 const initialStatePath = path.join(__dirname, '..', 'initial-state.json');
 
 test('Discord batch stores only confirmed included movements and learns merchant rules', async () => {
-  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'misgastos-discord-test-'));
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'miplata-discord-test-'));
   const store = await openStore(folder, initialStatePath);
   try {
     store.setMerchantRule('Pepito Miguel', 'food');
@@ -99,7 +99,7 @@ test('one Discord message can rename, recategorize and ignore several rows toget
 });
 
 test('Discord can create a category and split one pending expense without changing its total', async () => {
-  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'misgastos-discord-split-'));
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'miplata-discord-split-'));
   const store = await openStore(folder, initialStatePath);
   try {
     const original = { title: 'Compra mixta', kind: 'expense', amount: 1000, currency: 'CLP', date: '2026-10-08', time: '11:30', categoryId: 'food', include: true, reason: '' };
@@ -139,7 +139,7 @@ test('A split with a wrong total leaves the proposal untouched', () => {
 });
 
 test('A saved expense is reduced and its new part is inserted only after confirmation', async () => {
-  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'misgastos-saved-split-'));
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'miplata-saved-split-'));
   const store = await openStore(folder, initialStatePath);
   try {
     const current = store.getState();
@@ -223,7 +223,7 @@ test('Vision proposal rounds CLP, applies learned rules and pauses USD or uncert
 });
 
 test('Discord credentials are stored encrypted and never returned to the UI', () => {
-  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'misgastos-config-test-'));
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'miplata-config-test-'));
   const safeStorage = {
     isEncryptionAvailable: () => true,
     encryptString: (value) => Buffer.from('encrypted:' + value),

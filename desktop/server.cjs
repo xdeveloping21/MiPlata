@@ -39,9 +39,9 @@ function html(res, status, body) {
 
 function pairPage(token, expires) {
   const safeToken = JSON.stringify(token).replace(/</g, '\\u003c');
-  return `<!doctype html><html lang="es"><head><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta charset="utf-8"><title>Vincular MisGastos</title><style>
+  return `<!doctype html><html lang="es"><head><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta charset="utf-8"><title>Vincular MiPlata</title><style>
   :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#242633;background:#f6f4f0}*{box-sizing:border-box}body{margin:0;min-height:100dvh;display:grid;place-items:center;padding:24px}.card{width:min(100%,420px);padding:28px;border:1px solid #e5e1de;border-radius:22px;background:#fdfbf7;box-shadow:0 18px 60px #29213912}.logo{width:46px;height:46px;object-fit:contain}h1{font-size:26px;margin:22px 0 10px;letter-spacing:-.04em}p{color:#666a7a;line-height:1.5}.status{margin-top:24px;padding:16px;border-radius:13px;background:#eeeafa;color:#6659a8;font-weight:700}.small{font-size:13px}button{background:#7e6dca;color:white;border:0;border-radius:10px;padding:13px 16px;font-weight:700;cursor:pointer;margin-top:12px;width:100%}
-  </style></head><body><main class="card"><img class="logo" src="/assets/misgastos-logo.png" alt=""><h1>Vincular con MisGastos</h1><p>Enviamos una solicitud a tu PC. Apruébala allí para usar tus gastos desde este iPhone.</p><div class="status" id="status">Conectando con la PC...</div><p class="small">El código vence en unos minutos. La PC debe estar encendida y MisGastos abierto en segundo plano.</p><button id="retry" hidden>Volver a intentar</button></main><script>
+  </style></head><body><main class="card"><img class="logo" src="/assets/miplata-logo.png" alt=""><h1>Vincular con MiPlata</h1><p>Enviamos una solicitud a tu PC. Apruébala allí para usar tus gastos desde este iPhone.</p><div class="status" id="status">Conectando con la PC...</div><p class="small">El código vence en unos minutos. La PC debe estar encendida y MiPlata abierto en segundo plano.</p><button id="retry" hidden>Volver a intentar</button></main><script>
   const token=${safeToken}; const expiry=${Number(expires)}; const statusNode=document.getElementById('status'); let requestId=null;
   async function requestPair(){try{if(Date.now()>expiry)throw new Error('El QR venció. Generá uno nuevo en la PC.');const response=await fetch('/api/pair/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,name:/iPhone/i.test(navigator.userAgent)?'iPhone':'Celular'})});const result=await response.json();if(!response.ok)throw new Error(result.error||'No se pudo conectar');requestId=result.requestId;statusNode.textContent='Esperando aprobación en la PC...';poll();}catch(error){statusNode.textContent=error.message;document.getElementById('retry').hidden=false}}
   async function poll(){if(!requestId)return;try{const response=await fetch('/api/pair/status?requestId='+encodeURIComponent(requestId),{cache:'no-store'});const result=await response.json();if(result.status==='approved'){statusNode.textContent='¡Conectado! Abriendo tus gastos...';location.replace('/');return}if(result.status==='denied'||result.status==='expired'){statusNode.textContent=result.status==='denied'?'La PC rechazó la solicitud.':'La solicitud venció. Genera un nuevo QR.';return}}catch(error){statusNode.textContent='Esperando conexión con la PC...'}setTimeout(poll,2000)}
@@ -50,7 +50,7 @@ function pairPage(token, expires) {
 }
 
 function unauthorizedPage() {
-  return '<!doctype html><html lang="es"><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8"><title>MisGastos</title><body style="font-family:system-ui;background:#f6f4f0;color:#242633;padding:32px"><h1>Vincula este celular</h1><p>En la PC abre MisGastos, toca Conectar iPhone y escanea el QR nuevo.</p></body></html>';
+  return '<!doctype html><html lang="es"><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8"><title>MiPlata</title><body style="font-family:system-ui;background:#f6f4f0;color:#242633;padding:32px"><h1>Vincula este celular</h1><p>En la PC abre MiPlata, toca Conectar iPhone y escanea el QR nuevo.</p></body></html>';
 }
 
 async function readBody(req) {
@@ -156,20 +156,20 @@ function startServer(store, root, onPending, discordBot, discordConfig) {
       }
       if (pathname === '/api/export' && req.method === 'GET') {
         const state = store.getState();
-        const bytes = Buffer.from(JSON.stringify({ format: 'MisGastos', version: 2, exportedAt: new Date().toISOString(), state: state.data, merchantRules: store.merchantRules() }, null, 2));
-        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Disposition': 'attachment; filename="MisGastos-copia.json"', 'Content-Length': bytes.length, 'Cache-Control': 'no-store' });
+        const bytes = Buffer.from(JSON.stringify({ format: 'MiPlata', version: 2, exportedAt: new Date().toISOString(), state: state.data, merchantRules: store.merchantRules() }, null, 2));
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Disposition': 'attachment; filename="MiPlata-copia.json"', 'Content-Length': bytes.length, 'Cache-Control': 'no-store' });
         return res.end(bytes);
       }
       if (pathname === '/api/restore' && req.method === 'POST') {
         const body = await readBody(req);
-        if (body.format !== 'MisGastos' || ![1, 2].includes(body.version)) return json(res, 400, { error: 'No es una copia de MisGastos' });
+        if (!['MiPlata', 'MisGastos'].includes(body.format) || ![1, 2].includes(body.version)) return json(res, 400, { error: 'No es una copia de MiPlata ni de MisGastos' });
         const restored = store.restoreState(body.state, body.version === 2 ? body.merchantRules || [] : []);
         return json(res, 200, restored);
       }
 
       if (pathname === '/runtime.js') return res.writeHead(200, { 'Content-Type': TYPES['.js'], 'Cache-Control': 'no-store' }).end('window.MISGASTOS_LIVE=true;window.MISGASTOS_DESKTOP=' + JSON.stringify(isLocal) + ';');
-      if (pathname === '/assets/misgastos-logo.png') {
-        const bytes = fs.readFileSync(path.join(root, 'assets', 'misgastos-logo.png'));
+      if (pathname === '/assets/miplata-logo.png') {
+        const bytes = fs.readFileSync(path.join(root, 'assets', 'miplata-logo.png'));
         res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': bytes.length, 'Cache-Control': 'no-store' });
         return res.end(bytes);
       }
@@ -180,7 +180,7 @@ function startServer(store, root, onPending, discordBot, discordConfig) {
         return res.end(bytes);
       }
       if (!authorized) return html(res, 401, unauthorizedPage());
-      const files = { '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/category-icons.js': 'category-icons.js', '/styles.css': 'styles.css', '/assets/misgastos-logo.png': 'assets/misgastos-logo.png', '/assets/misgastos-logo-v2.png': 'assets/misgastos-logo-v2.png' };
+      const files = { '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/category-icons.js': 'category-icons.js', '/styles.css': 'styles.css', '/assets/miplata-logo.png': 'assets/miplata-logo.png', '/assets/miplata-logo-v2.png': 'assets/miplata-logo-v2.png' };
       const file = files[pathname];
       if (!file) return json(res, 404, { error: 'No encontrado' });
       const bytes = fs.readFileSync(path.join(root, file));

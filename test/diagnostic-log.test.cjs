@@ -6,7 +6,7 @@ const path = require('node:path');
 const { createDiagnosticLog, MAX_DAILY_BYTES } = require('../desktop/diagnostic-log.cjs');
 
 test('diagnostic logs keep seven days and flag a session without a clean exit', () => {
-  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'misgastos-logs-test-'));
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'miplata-logs-test-'));
   const logDir = path.join(folder, 'logs');
   fs.mkdirSync(logDir);
   fs.writeFileSync(path.join(logDir, '2026-09-26.log'), 'old\n');
@@ -34,7 +34,7 @@ test('diagnostic logs keep seven days and flag a session without a clean exit', 
 });
 
 test('a daily diagnostic file cannot grow past its size limit', () => {
-  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'misgastos-logs-size-'));
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'miplata-logs-size-'));
   const log = createDiagnosticLog(folder, { now: () => new Date(2026, 9, 3, 12) });
   try {
     log.start('0.2.5');

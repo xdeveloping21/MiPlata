@@ -1,4 +1,4 @@
-const STORAGE_KEY = 'misgastos-prototype-v2';
+const STORAGE_KEY = 'miplata-prototype-v2';
 const SAMPLE_MONTH = '2026-09';
 const QR_CODE = 'A7F3K9M2';
 const LIVE = Boolean(window.MISGASTOS_LIVE);
@@ -447,12 +447,12 @@ function shell(content) {
   const themeIcon = data.theme === 'light' ? 'moon' : 'sun';
   return (LIVE ? '' : '<div class="prototype-ribbon"><span class="prototype-dot"></span> PROTOTIPO DE DISEÑO <span class="ribbon-separator">|</span> Datos ficticios</div>') +
     '<div class="app-shell">' +
-      (LIVE ? '' : '<div class="titlebar"><div class="titlebar-brand"><span class="brand-mark"><img src="assets/misgastos-logo.png" alt="" width="28" height="28" style="display:block;width:28px;height:28px;max-width:28px;max-height:28px" /></span><span>MisGastos</span></div><div class="titlebar-label">Vista previa para revisar el diseño</div><div class="window-controls" aria-hidden="true"><span></span><span></span><span></span></div></div>') +
-      '<aside class="sidebar"><div class="sidebar-brand"><span class="brand-mark large"><img src="assets/misgastos-logo.png" alt="" width="42" height="42" style="display:block;width:42px;height:42px;max-width:42px;max-height:42px" /></span><div><strong>MisGastos</strong><small>Tu dinero, en orden</small></div></div>' +
+      (LIVE ? '' : '<div class="titlebar"><div class="titlebar-brand"><span class="brand-mark"><img src="assets/miplata-logo.png" alt="" width="28" height="28" style="display:block;width:28px;height:28px;max-width:28px;max-height:28px" /></span><span>MiPlata</span></div><div class="titlebar-label">Vista previa para revisar el diseño</div><div class="window-controls" aria-hidden="true"><span></span><span></span><span></span></div></div>') +
+      '<aside class="sidebar"><div class="sidebar-brand"><span class="brand-mark large"><img src="assets/miplata-logo.png" alt="" width="42" height="42" style="display:block;width:42px;height:42px;max-width:42px;max-height:42px" /></span><div><strong>MiPlata</strong><small>Tu dinero, en orden</small></div></div>' +
         '<nav class="side-nav" aria-label="Principal">' +
           navItem('home', 'Inicio', 'home') + navItem('transactions', 'Movimientos', 'list') + navItem('categories', 'Categorías', 'categories') + navItem('savings', 'Ahorros', 'savings') + navItem('settings', 'Ajustes', 'settings') +
         '</nav><div class="sidebar-foot"><span class="demo-status"><span class="status-dot"></span> ' + (LIVE ? 'Datos guardados en tu PC' : 'Modo demostración') + '</span><small>' + (LIVE ? 'Se sincronizan con tus celulares vinculados.' : 'Los cambios solo viven en este navegador.') + '</small></div></aside>' +
-      '<div class="app-body"><div class="mobile-topbar"><div class="mobile-wordmark"><span class="brand-mark"><img src="assets/misgastos-logo.png" alt="" width="29" height="29" style="display:block;width:29px;height:29px;max-width:29px;max-height:29px" /></span><strong>MisGastos</strong></div><button class="icon-button" data-action="toggle-theme" aria-label="Cambiar tema" type="button">' + icon(themeIcon, 20) + '</button></div>' +
+      '<div class="app-body"><div class="mobile-topbar"><div class="mobile-wordmark"><span class="brand-mark"><img src="assets/miplata-logo.png" alt="" width="29" height="29" style="display:block;width:29px;height:29px;max-width:29px;max-height:29px" /></span><strong>MiPlata</strong></div><button class="icon-button" data-action="toggle-theme" aria-label="Cambiar tema" type="button">' + icon(themeIcon, 20) + '</button></div>' +
         '<main class="main-content" id="main-content">' + content + '</main></div>' +
       '<nav class="mobile-nav" aria-label="Principal">' +
         navItem('home', 'Inicio', 'home') + navItem('transactions', 'Movimientos', 'list') + navItem('categories', 'Categorías', 'categories') + navItem('savings', 'Ahorros', 'savings') + navItem('settings', 'Ajustes', 'settings') +
@@ -702,7 +702,7 @@ function renderSettings() {
       return '<div class="linked-device"><span>' + icon('phone', 19) + '<strong>' + escapeHtml(device.name) + '</strong></span><button class="text-button" data-revoke-device="' + escapeHtml(device.id) + '" type="button">Revocar</button></div>';
     }).join('');
     return pageHeader('PREFERENCIAS', 'Ajustes', 'Tu dinero y tus dispositivos, bajo tu control.', '') +
-      '<div class="settings-grid"><section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('sun', 20) + '</span><div><h2>Apariencia</h2><p>Elige cómo quieres ver MisGastos.</p></div></div>' +
+      '<div class="settings-grid"><section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('sun', 20) + '</span><div><h2>Apariencia</h2><p>Elige cómo quieres ver MiPlata.</p></div></div>' +
         '<div class="theme-options"><button type="button" data-theme-option="light" class="theme-option' + (data.theme === 'light' ? ' selected' : '') + '"><span class="theme-swatch light-swatch"></span><span><strong>Claro</strong><small>Marfil y colores suaves</small></span>' + (data.theme === 'light' ? icon('check', 18) : '') + '</button>' +
         '<button type="button" data-theme-option="dark" class="theme-option' + (data.theme === 'dark' ? ' selected' : '') + '"><span class="theme-swatch dark-swatch"></span><span><strong>Oscuro</strong><small>Grafito y contraste sereno</small></span>' + (data.theme === 'dark' ? icon('check', 18) : '') + '</button></div></section>' +
       '<section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('wallet', 20) + '</span><div><h2>Saldo inicial</h2><p>' + money(data.openingBalance) + '</p></div></div><button class="setting-action" data-action="edit-opening-balance" type="button"><span>' + icon('edit', 18) + ' Cambiar saldo inicial</span>' + icon('arrowRight', 18) + '</button></section>' +
@@ -714,10 +714,10 @@ function renderSettings() {
       (DESKTOP ? '<section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('download', 20) + '</span><div><h2>Copias de seguridad</h2><p>Se guarda una copia local diaria cuando cambias datos.</p></div></div>' +
         '<button class="setting-action" data-action="export-data" type="button"><span>' + icon('download', 18) + ' Exportar mis datos</span>' + icon('arrowRight', 18) + '</button>' +
         '<button class="setting-action" data-action="restore-data" type="button"><span>' + icon('reset', 18) + ' Restaurar una copia</span>' + icon('arrowRight', 18) + '</button><input id="restore-file" type="file" accept=".json,application/json" hidden />' +
-        '<p class="settings-note">Copias automáticas en ' + escapeHtml(desktopInfo.backupDir || 'la carpeta de datos de MisGastos') + '</p></section>' : '') + '</div>';
+        '<p class="settings-note">Copias automáticas en ' + escapeHtml(desktopInfo.backupDir || 'la carpeta de datos de MiPlata') + '</p></section>' : '') + '</div>';
   }
   return pageHeader('PREFERENCIAS', 'Ajustes', 'Personaliza esta vista previa y prueba el enlace con tu iPhone.', '') +
-    '<div class="settings-grid"><section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('sun', 20) + '</span><div><h2>Apariencia</h2><p>Elige cómo quieres ver MisGastos.</p></div></div>' +
+    '<div class="settings-grid"><section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('sun', 20) + '</span><div><h2>Apariencia</h2><p>Elige cómo quieres ver MiPlata.</p></div></div>' +
       '<div class="theme-options"><button type="button" data-theme-option="light" class="theme-option' + (data.theme === 'light' ? ' selected' : '') + '"><span class="theme-swatch light-swatch"></span><span><strong>Claro</strong><small>Marfil y colores suaves</small></span>' + (data.theme === 'light' ? icon('check', 18) : '') + '</button>' +
       '<button type="button" data-theme-option="dark" class="theme-option' + (data.theme === 'dark' ? ' selected' : '') + '"><span class="theme-swatch dark-swatch"></span><span><strong>Oscuro</strong><small>Grafito y contraste sereno</small></span>' + (data.theme === 'dark' ? icon('check', 18) : '') + '</button></div></section>' +
     '<section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('phone', 20) + '</span><div><h2>Tu iPhone</h2><p>' + (data.linked ? 'iPhone vinculado en esta demostración.' : 'Prueba cómo sería el primer enlace por QR.') + '</p></div></div>' +
@@ -752,7 +752,7 @@ function qrMarkup() {
 
 function renderPairPage() {
   const content = pairingStep === 'start'
-    ? '<p>Escanea el QR que muestra MisGastos en tu PC o ingresa el código manualmente.</p><div class="scanner-preview"><div class="scan-corners">' + icon('qr', 90) + '</div><span>Vista de cámara simulada</span></div>' +
+    ? '<p>Escanea el QR que muestra MiPlata en tu PC o ingresa el código manualmente.</p><div class="scanner-preview"><div class="scan-corners">' + icon('qr', 90) + '</div><span>Vista de cámara simulada</span></div>' +
       '<form id="pair-form" novalidate><label class="field-label" for="pair-code">Código de vinculación</label><input class="text-input pair-code" id="pair-code" name="code" autocomplete="off" maxlength="8" placeholder="A7F3K9M2" required />' +
       '<button class="button button-primary full-width" type="submit">Continuar ' + icon('arrowRight', 17) + '</button></form>'
     : pairingStep === 'pending'
@@ -862,7 +862,7 @@ function qrModal() {
   return '<div class="modal-backdrop" data-action="close-modal"></div><div class="dialog qr-dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">' +
     '<div class="dialog-head"><div><p class="eyebrow">ACCESO MÓVIL</p><h2 id="dialog-title">' + (pending ? 'Solicitud de iPhone' : 'Conectar iPhone') + '</h2></div><button class="icon-button" data-action="close-modal" type="button" aria-label="Cerrar">' + icon('close', 20) + '</button></div>' +
     (pending
-      ? '<div class="approval-icon">' + icon('phone', 30) + '</div><p class="qr-intro">Un iPhone solicita acceso a MisGastos. En la app real, aprobarías un dispositivo concreto desde esta ventana.</p><div class="approval-actions"><button class="button button-outline" data-action="deny-pair" type="button">Rechazar</button><button class="button button-primary" data-action="approve-pair" type="button">Permitir acceso</button></div>'
+      ? '<div class="approval-icon">' + icon('phone', 30) + '</div><p class="qr-intro">Un iPhone solicita acceso a MiPlata. En la app real, aprobarías un dispositivo concreto desde esta ventana.</p><div class="approval-actions"><button class="button button-outline" data-action="deny-pair" type="button">Rechazar</button><button class="button button-primary" data-action="approve-pair" type="button">Permitir acceso</button></div>'
       : '<p class="qr-intro">Escanea este código desde tu iPhone y aprueba la solicitud en esta PC.</p><div class="qr-wrap">' + qrMarkup() + '</div><div class="pair-code-display"><small>CÓDIGO MANUAL</small><strong>' + QR_CODE + '</strong></div>' +
         '<button class="button button-outline full-width" data-action="simulate-request" type="button">Simular solicitud desde el iPhone</button><p class="qr-disclaimer">QR ilustrativo. El enlace real se implementará después de aprobar el diseño.</p>') +
     '</div>';
@@ -889,10 +889,10 @@ function discordModal() {
   const settings = desktopInfo.discord || {};
   return '<div class="modal-backdrop" data-action="close-modal"></div><div class="dialog discord-dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">' +
     '<div class="dialog-head"><div><p class="eyebrow">CARGA RÁPIDA</p><h2 id="dialog-title">Bot de Discord</h2></div><button class="icon-button" data-action="close-modal" type="button" aria-label="Cerrar">' + icon('close', 20) + '</button></div>' +
-    '<p class="settings-note">Usa un canal privado del servidor MisGastos. El bot solo leerá ese canal y solo aceptará mensajes del dueño del servidor.</p>' +
+    '<p class="settings-note">Usa un canal privado del servidor MiPlata. El bot solo leerá ese canal y solo aceptará mensajes del dueño del servidor.</p>' +
     '<form id="discord-form"><label class="field-label" for="discord-channel">ID del canal</label><input class="text-input" id="discord-channel" name="channelId" inputmode="numeric" value="' + escapeHtml(settings.channelId || '') + '" placeholder="Copiar ID del canal en Discord" required />' +
     '<label class="field-label" for="discord-token">Token del bot</label><input class="text-input" id="discord-token" name="botToken" type="password" autocomplete="off" placeholder="' + (settings.hasBotToken ? 'Guardado. Dejar vacío para conservarlo' : 'Pega el token del bot') + '" />' +
-    '<label class="discord-toggle"><input name="enabled" type="checkbox"' + (settings.enabled ? ' checked' : '') + ' /> Activar bot al iniciar MisGastos</label>' +
+    '<label class="discord-toggle"><input name="enabled" type="checkbox"' + (settings.enabled ? ' checked' : '') + ' /> Activar bot al iniciar MiPlata</label>' +
     '<p class="settings-note">El bot usa Claude Haiku 5.5 mediante Claude Code CLI en esta PC, con esfuerzo bajo. Consume el límite de uso de tu cuenta de Claude, sin clave API. El token de Discord se cifra en Windows y no se exporta.</p>' +
     '<div class="dialog-actions"><button class="button button-outline" type="button" data-action="close-modal">Cancelar</button><button class="button button-primary" type="submit">Guardar conexión</button></div></form></div>';
 }
@@ -1362,7 +1362,7 @@ document.addEventListener('change', async function (event) {
   try {
     if (file.size > 2000000) throw new Error('La copia es demasiado grande');
     const content = JSON.parse(await file.text());
-    if (content.format !== 'MisGastos' || ![1, 2].includes(content.version) || !content.state) throw new Error('No es una copia de MisGastos');
+    if (!['MiPlata', 'MisGastos'].includes(content.format) || ![1, 2].includes(content.version) || !content.state) throw new Error('No es una copia de MiPlata ni de MisGastos');
     restoreCandidate = content;
     modal = { type: 'confirmation', action: 'restore' };
     render();
@@ -1621,7 +1621,7 @@ async function refreshLiveState() {
 }
 
 async function initializeLive() {
-  document.getElementById('app').innerHTML = '<div class="startup-status">Abriendo MisGastos...</div>';
+  document.getElementById('app').innerHTML = '<div class="startup-status">Abriendo MiPlata...</div>';
   try {
     const response = await fetch('/api/state', { cache: 'no-store' });
     if (!response.ok) throw new Error('No se pudo conectar con la PC');
@@ -1633,7 +1633,7 @@ async function initializeLive() {
     setInterval(refreshLiveState, 10000);
     if (DESKTOP) setInterval(function () { refreshDesktopInfo(false); }, 2500);
   } catch (error) {
-    document.getElementById('app').innerHTML = '<div class="startup-status"><strong>No se pudo abrir MisGastos</strong><p>' + escapeHtml(error.message) + '</p><button class="button button-primary" data-action="reload-app" type="button">Reintentar</button></div>';
+    document.getElementById('app').innerHTML = '<div class="startup-status"><strong>No se pudo abrir MiPlata</strong><p>' + escapeHtml(error.message) + '</p><button class="button button-primary" data-action="reload-app" type="button">Reintentar</button></div>';
   }
 }
 

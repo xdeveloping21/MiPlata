@@ -1,11 +1,14 @@
 {
-  "name": "misgastos",
+  "name": "miplata",
   "version": "0.2.8",
   "private": true,
-  "description": "MisGastos para Windows y iPhone",
-  "author": "Valentin Tarnovsky",
+  "description": "MiPlata: gastos para Windows con acceso desde iPhone, en español neutro y pesos chilenos",
+  "author": "xdeveloping21",
+  "contributors": [
+    "Valentin Tarnovsky (autor de MisGastos, proyecto original)"
+  ],
   "license": "MIT",
-  "repository": "https://github.com/ValentinTarnovsky/MisGastos",
+  "repository": "https://github.com/xdeveloping21/MiPlata",
   "main": "desktop/main.cjs",
   "scripts": {
     "start": "electron .",
@@ -24,8 +27,8 @@
     "png-to-ico": "3.0.1"
   },
   "build": {
-    "appId": "ar.misgastos.app",
-    "productName": "MisGastos",
+    "appId": "cl.miplata.app",
+    "productName": "MiPlata",
     "directories": {
       "output": "dist"
     },
@@ -48,14 +51,15 @@
     ],
     "win": {
       "target": "dir",
-      "icon": "assets/misgastos.ico"
+      "icon": "assets/miplata.ico"
     },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "artifactName": "MiPlata-Setup-${version}.${ext}"
     }
   }
 }

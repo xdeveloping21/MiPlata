@@ -40,7 +40,7 @@ function preview(batch, categories) {
   });
   const ready = batch.rows.filter((row) => row.include).length;
   const savedAdjustment = batch.rows.some((row) => row.adjustmentGroup);
-  return ['**Propuesta de MisGastos**', ...(lines.length ? lines : ['No encontré movimientos legibles. Prueba otra captura o escríbelos en un mensaje.']), '',
+  return ['**Propuesta de MiPlata**', ...(lines.length ? lines : ['No encontré movimientos legibles. Prueba otra captura o escríbelos en un mensaje.']), '',
     ready ? savedAdjustment ? 'Escribe **guardar** para actualizar el gasto existente y agregar la parte nueva. También puedes escribir **cancelar**.' : `Escribe **guardar** para cargar ${ready} movimiento${ready === 1 ? '' : 's'}. Puedes corregir varias filas juntas: "1 Ropa y nombre Costurera, 2 Comida, ignora 3".` : 'No hay movimientos listos para guardar. Puedes corregir una o varias filas, o cancelar.'].join('\n').slice(0, 1900);
 }
 
@@ -80,7 +80,7 @@ function createDiscordBot(store, config, onStatus = () => {}) {
     try {
       const recent = await message.channel.messages.fetch({ before: message.id, limit: 8 });
       return [...recent.values()].reverse().filter((item) => item.author.bot || item.author.id === message.author.id)
-        .map((item) => ({ from: item.author.bot ? 'MisGastos' : 'Usuario', text: String(item.content || '').slice(0, 700) }));
+        .map((item) => ({ from: item.author.bot ? 'MiPlata' : 'Usuario', text: String(item.content || '').slice(0, 700) }));
     } catch (_) { return []; }
   }
 
@@ -140,7 +140,7 @@ function createDiscordBot(store, config, onStatus = () => {}) {
       } else if (pending && !attachments.length && /^(guardar|confirmar|listo|sí|si)$/i.test(input)) {
         const count = store.commitBatch(pending.id);
         const updated = pending.rows.filter((row) => row.include && row.sourceTransactionId).length;
-        const result = updated ? `Listo. Corregí ${updated} movimiento${updated === 1 ? '' : 's'} guardado${updated === 1 ? '' : 's'} y agregué ${count - updated} parte${count - updated === 1 ? '' : 's'} nueva${count - updated === 1 ? '' : 's'}.` : count ? `Listo. Guardé ${count} movimiento${count === 1 ? '' : 's'} en MisGastos.` : 'No había movimientos listos para guardar.';
+        const result = updated ? `Listo. Corregí ${updated} movimiento${updated === 1 ? '' : 's'} guardado${updated === 1 ? '' : 's'} y agregué ${count - updated} parte${count - updated === 1 ? '' : 's'} nueva${count - updated === 1 ? '' : 's'}.` : count ? `Listo. Guardé ${count} movimiento${count === 1 ? '' : 's'} en MiPlata.` : 'No había movimientos listos para guardar.';
         await message.reply({ content: result, allowedMentions: { parse: [] } });
       } else if (pending && !attachments.length && /^(cancelar|descartar|olvidar)$/i.test(input)) {
         store.updateBatch(pending.id, pending.rows, 'cancelled');
