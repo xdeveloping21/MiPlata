@@ -81,7 +81,7 @@ function icon(name, size) {
 }
 
 const PRESET_TONES = ['lavender', 'coral', 'mint', 'sky', 'rose', 'peach'];
-const TONE_LABELS = { lavender: 'Lavanda', coral: 'Coral', mint: 'Menta', sky: 'Celeste', rose: 'Rosa', peach: 'Durazno' };
+const TONE_LABELS = { lavender: 'Verde', coral: 'Coral', mint: 'Menta', sky: 'Celeste', rose: 'Rosa', peach: 'Durazno' };
 
 function isCustomTone(tone) { return typeof tone === 'string' && /^#[0-9a-f]{6}$/i.test(tone); }
 
@@ -830,7 +830,7 @@ function categoryModal() {
   const category = modal.id ? categoryById(modal.id) : null;
   const selectedIcon = category && CATEGORY_ICON_CATALOG[category.icon] ? category.icon : 'basket';
   const selectedTone = category ? category.tone : 'lavender';
-  const customColor = isCustomTone(selectedTone) ? selectedTone.toUpperCase() : '#7E6DCA';
+  const customColor = isCustomTone(selectedTone) ? selectedTone.toUpperCase() : '#1FA774';
   const customSelected = isCustomTone(selectedTone);
   return '<div class="modal-backdrop" data-action="close-modal"></div><div class="dialog category-dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">' +
     '<div class="dialog-head"><div><p class="eyebrow">CATEGORÍAS</p><h2 id="dialog-title">' + (category ? 'Editar categoría' : 'Nueva categoría') + '</h2></div><button class="icon-button" data-action="close-modal" type="button" aria-label="Cerrar">' + icon('close', 20) + '</button></div>' +
@@ -843,7 +843,7 @@ function categoryModal() {
       PRESET_TONES.map(function (tone) { return '<label class="tone-option tone-' + tone + '" aria-label="' + TONE_LABELS[tone] + '"><input type="radio" name="tone" value="' + tone + '"' + (selectedTone === tone ? ' checked' : '') + ' /><span></span></label>'; }).join('') +
       '<input class="visually-hidden" type="radio" id="custom-tone-radio" name="tone" value="custom"' + (customSelected ? ' checked' : '') + ' /></div>' +
     '<button class="custom-tone-toggle' + (customSelected ? ' selected' : '') + '" type="button" data-custom-tone-toggle aria-expanded="' + String(customSelected) + '"><span class="custom-tone-dot" style="background:' + customColor + '"></span><span>Color personalizado</span>' + icon('arrowDown', 16) + '</button>' +
-    '<div class="custom-tone-panel" data-custom-tone-panel' + (customSelected ? '' : ' hidden') + '><label class="custom-color-swatch" style="background:' + customColor + '" aria-label="Elegir color"><input id="category-color" type="color" value="' + customColor + '" /></label><div><label class="field-label" for="category-color-hex">Código HEX</label><input class="text-input color-hex-input" id="category-color-hex" name="customTone" maxlength="7" value="' + customColor + '" placeholder="#7E6DCA" spellcheck="false" /></div></div>' +
+    '<div class="custom-tone-panel" data-custom-tone-panel' + (customSelected ? '' : ' hidden') + '><label class="custom-color-swatch" style="background:' + customColor + '" aria-label="Elegir color"><input id="category-color" type="color" value="' + customColor + '" /></label><div><label class="field-label" for="category-color-hex">Código HEX</label><input class="text-input color-hex-input" id="category-color-hex" name="customTone" maxlength="7" value="' + customColor + '" placeholder="#1FA774" spellcheck="false" /></div></div>' +
     '<div class="dialog-actions">' + (category && category.id !== 'savings' && category.id !== 'savings-return' ? '<button class="button button-danger" type="button" data-action="delete-category">' + icon('trash', 17) + '<span>Eliminar</span></button>' : '') +
       '<button class="button button-primary" type="submit">Guardar categoría</button></div></form></div>';
 }
@@ -946,7 +946,7 @@ function renderModal() {
 function render() {
   document.body.classList.toggle('live-app', LIVE);
   document.documentElement.dataset.theme = data.theme;
-  document.querySelector('meta[name="theme-color"]').setAttribute('content', data.theme === 'light' ? '#f6f4f0' : '#191b22');
+  document.querySelector('meta[name="theme-color"]').setAttribute('content', data.theme === 'light' ? '#f7faf8' : '#0c1512');
   let content = '';
   if (route === 'home') content = renderHome();
   else if (route === 'annual') content = renderAnnual();

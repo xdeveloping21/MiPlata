@@ -78,7 +78,7 @@ function createWindow() {
     title: 'MiPlata',
     icon,
     show: false,
-    backgroundColor: '#f6f4f0',
+    backgroundColor: '#f7faf8',
     autoHideMenuBar: true,
     webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true }
   });
