@@ -138,7 +138,7 @@ function loadData() {
 
 let data = loadData();
 let route = 'home';
-let selectedMonth = LIVE ? new Date().toISOString().slice(0, 7) : SAMPLE_MONTH;
+let selectedMonth = LIVE ? todayDate().slice(0, 7) : SAMPLE_MONTH;
 let annualYear = LIVE ? new Date().getFullYear() : 2026;
 let filter = 'all';
 let query = '';
@@ -254,6 +254,18 @@ function monthLabel(month) {
   const date = new Date(month + '-01T12:00:00');
   const label = new Intl.DateTimeFormat('es-CL', { month: 'long', year: 'numeric' }).format(date);
   return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+// Fecha de hoy según el reloj del equipo (no UTC), en formato AAAA-MM-DD.
+function todayDate() {
+  const now = new Date();
+  return now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+}
+
+// Fecha sugerida para un movimiento nuevo: hoy si se está viendo el mes actual; si no, el último día del mes elegido.
+function defaultEntryDate() {
+  const today = todayDate();
+  return selectedMonth === today.slice(0, 7) ? today : lastDateOfMonth(selectedMonth);
 }
 
 function lastDateOfMonth(month) {
@@ -764,7 +776,7 @@ function transactionModal() {
   const item = modal.id ? data.transactions.find(function (entry) { return entry.id === modal.id; }) : null;
   const kind = modal.kind || (item && item.kind) || 'expense';
   const categories = data.categories.filter(function (entry) { return entry.kind === kind; });
-  const date = item ? item.date : lastDateOfMonth(selectedMonth);
+  const date = item ? item.date : defaultEntryDate();
   return '<div class="modal-backdrop" data-action="close-modal"></div><div class="dialog transaction-dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">' +
     '<div class="dialog-head"><div><p class="eyebrow">MOVIMIENTO</p><h2 id="dialog-title">' + (item ? 'Editar movimiento' : 'Agregar movimiento') + '</h2></div><button class="icon-button" data-action="close-modal" type="button" aria-label="Cerrar">' + icon('close', 20) + '</button></div>' +
     '<form id="transaction-form" novalidate><div class="kind-switch"><button type="button" data-modal-kind="expense" class="' + (kind === 'expense' ? 'selected' : '') + '">Gasto</button><button type="button" data-modal-kind="income" class="' + (kind === 'income' ? 'selected' : '') + '">Ingreso</button></div>' +
@@ -804,7 +816,7 @@ function savingsModal() {
   const action = item ? (item.categoryId === 'savings' ? 'deposit' : 'withdrawal') : modal.action;
   const deposit = action === 'deposit';
   const currency = item ? savingsCurrency(item) : 'CLP';
-  const date = item ? item.date : lastDateOfMonth(selectedMonth);
+  const date = item ? item.date : defaultEntryDate();
   const balances = savingsBalances();
   const availableCurrencies = SAVINGS_CURRENCIES.concat((currency === 'EUR' && item) || (!deposit && balances.EUR > 0) ? [LEGACY_EUR] : []);
   const choices = availableCurrencies.filter(function (entry) { return deposit || balances[entry.code] > 0 || entry.code === currency && item; }).map(function (entry) {
@@ -1610,6 +1622,14 @@ async function initializeLive() {
     if (DESKTOP) await refreshDesktopInfo(false);
     setInterval(refreshLiveState, 10000);
     if (DESKTOP) setInterval(function () { refreshDesktopInfo(false); }, 2500);
+    // La app queda abierta en la bandeja por días: al cambiar de mes, pasa al mes nuevo si no se estaba viendo otro.
+    let followedMonth = selectedMonth;
+    setInterval(function () {
+      const current = todayDate().slice(0, 7);
+      if (current === followedMonth || modal) return;
+      if (selectedMonth === followedMonth) { selectedMonth = current; render(); }
+      followedMonth = current;
+    }, 60000);
   } catch (error) {
     document.getElementById('app').innerHTML = '<div class="startup-status"><strong>No se pudo abrir MiPlata</strong><p>' + escapeHtml(error.message) + '</p><button class="button button-primary" data-action="reload-app" type="button">Reintentar</button></div>';
   }
