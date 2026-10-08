@@ -4,7 +4,7 @@ const QR_CODE = 'A7F3K9M2';
 const LIVE = Boolean(window.MISGASTOS_LIVE);
 const DESKTOP = Boolean(window.MISGASTOS_DESKTOP);
 const SAVINGS_CURRENCIES = [
-  { code: 'ARS', name: 'Pesos argentinos', short: 'Pesos' },
+  { code: 'CLP', name: 'Pesos chilenos', short: 'Pesos' },
   { code: 'USD', name: 'Dólares estadounidenses', short: 'Dólares' }
 ];
 const LEGACY_EUR = { code: 'EUR', name: 'Euros', short: 'Euros' };
@@ -171,7 +171,7 @@ function saveData() {
         stateRevision = result.revision;
         data = result.data;
         render();
-        toast('Otro dispositivo cambió los datos. Volvé a intentar tu cambio.');
+        toast('Otro dispositivo cambió los datos. Vuelve a intentar tu cambio.');
         return;
       }
       if (!response.ok) throw new Error(result.error || 'No se pudieron guardar los datos');
@@ -197,26 +197,62 @@ function escapeHtml(value) {
 }
 
 function money(amount) {
-  return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0, minimumFractionDigits: 0 }).format(amount).replace(/\u00a0/g, ' ');
+  return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0, minimumFractionDigits: 0 }).format(amount).replace(/\u00a0/g, ' ');
+}
+
+// Montos en campos de texto: se muestran con punto de miles (10000 -> 10.000) y coma decimal.
+function formatAmountValue(amount) {
+  return Number.isFinite(Number(amount)) && amount !== '' ? Number(amount).toLocaleString('es-CL', { maximumFractionDigits: 2 }) : '';
+}
+
+function formatAmountText(text, allowDecimals, allowNegative) {
+  const value = String(text || '');
+  const negative = allowNegative && /^\s*-/.test(value);
+  const parts = value.split(',');
+  const whole = parts[0].replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+  let result = (negative ? '-' : '') + whole.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  if (allowDecimals && parts.length > 1) result += ',' + parts.slice(1).join('').replace(/\D/g, '').slice(0, 2);
+  return result;
+}
+
+// Devuelve NaN si el texto no es un monto bien escrito, para que el formulario lo rechace.
+function parseAmountText(text) {
+  const clean = String(text || '').trim();
+  if (!/^-?(?:\d{1,3}(?:\.\d{3})+|\d+)(?:,\d{1,2})?$/.test(clean)) return NaN;
+  return Number(clean.replace(/\./g, '').replace(',', '.'));
+}
+
+function reformatAmountInput(input) {
+  const before = input.value;
+  const caret = input.selectionStart ?? before.length;
+  const digitsBeforeCaret = before.slice(0, caret).replace(/[^\d,-]/g, '').length;
+  const after = formatAmountText(before, 'amountDecimals' in input.dataset, 'amountNegative' in input.dataset);
+  if (after === before) return;
+  input.value = after;
+  let position = 0;
+  for (let seen = 0; position < after.length && seen < digitsBeforeCaret; position++) {
+    if (/[\d,-]/.test(after[position])) seen++;
+  }
+  input.setSelectionRange(position, position);
 }
 
 function shortMoney(amount) {
-  if (amount >= 1000000) return '$ ' + (amount / 1000000).toLocaleString('es-AR', { maximumFractionDigits: 1 }) + ' M';
-  if (amount >= 1000) return '$ ' + Math.round(amount / 1000).toLocaleString('es-AR') + ' mil';
+  if (amount >= 1000000) return '$ ' + (amount / 1000000).toLocaleString('es-CL', { maximumFractionDigits: 1 }) + ' M';
+  if (amount >= 1000) return '$ ' + Math.round(amount / 1000).toLocaleString('es-CL') + ' mil';
   return money(amount);
 }
 
 function prettyDate(date) {
-  return new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(date + 'T12:00:00'));
+  return new Intl.DateTimeFormat('es-CL', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(date + 'T12:00:00'));
 }
 
 function numericDate(date) {
-  return new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(date + 'T12:00:00'));
+  return new Intl.DateTimeFormat('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(date + 'T12:00:00'));
 }
 
 function monthLabel(month) {
   const date = new Date(month + '-01T12:00:00');
-  const label = new Intl.DateTimeFormat('es-AR', { month: 'long', year: 'numeric' }).format(date);
+  const label = new Intl.DateTimeFormat('es-CL', { month: 'long', year: 'numeric' }).format(date);
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
@@ -231,7 +267,7 @@ function categoryById(id) {
 }
 
 function conceptKey(title) {
-  return String(title || '').trim().replace(/\s+/g, ' ').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es-AR');
+  return String(title || '').trim().replace(/\s+/g, ' ').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es-CL');
 }
 
 function conceptGroups(categoryId, items) {
@@ -288,7 +324,7 @@ function isSavingsEntry(item) {
 }
 
 function savingsCurrency(item) {
-  return item.savingsCurrency === 'EUR' || item.savingsCurrency === 'USD' ? item.savingsCurrency : 'ARS';
+  return item.savingsCurrency === 'EUR' || item.savingsCurrency === 'USD' ? item.savingsCurrency : 'CLP';
 }
 
 function savingsUnits(item) {
@@ -296,7 +332,7 @@ function savingsUnits(item) {
 }
 
 function savingsBalances(items) {
-  const balances = { ARS: 0, USD: 0, EUR: 0 };
+  const balances = { CLP: 0, USD: 0, EUR: 0 };
   (items || savingsTransactions()).forEach(function (item) {
     if (!isSavingsEntry(item)) return;
     const currency = savingsCurrency(item);
@@ -307,7 +343,7 @@ function savingsBalances(items) {
 
 function formatSavings(currency, amount) {
   const symbol = currency === 'USD' ? 'US$' : currency === 'EUR' ? '€' : '$';
-  const value = new Intl.NumberFormat('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(Math.abs(amount));
+  const value = new Intl.NumberFormat('es-CL', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(Math.abs(amount));
   return (amount < 0 ? '- ' : '') + symbol + ' ' + value;
 }
 
@@ -328,7 +364,7 @@ function totals() {
 
 function customSelect(id, label, name, value, choices, className) {
   const selected = choices.find(function (choice) { return choice.value === value; }) || choices[0];
-  const selectedContent = selected ? (selected.leading || '') + '<span>' + escapeHtml(selected.label) + '</span>' : '<span>Elegí una opción</span>';
+  const selectedContent = selected ? (selected.leading || '') + '<span>' + escapeHtml(selected.label) + '</span>' : '<span>Elige una opción</span>';
   return '<div class="custom-select ' + (className || '') + '" data-dropdown="' + id + '">' +
     (className === 'form-dropdown' ? '<span class="field-label" id="' + id + '-label">' + escapeHtml(label) + '</span>' : '') +
     (name ? '<input type="hidden" name="' + escapeHtml(name) + '" value="' + escapeHtml(selected ? selected.value : '') + '" />' : '') +
@@ -460,8 +496,8 @@ function renderChart(items, heading) {
   }).join('');
   return '<section class="panel chart-panel"><div class="panel-heading"><div><p class="section-eyebrow">DE UN VISTAZO</p><h2>' + title + '</h2></div><span class="panel-period">' + escapeHtml(monthLabel(selectedMonth)) + '</span></div>' +
     (weeks.some(Boolean)
-      ? '<div class="chart-wrap"><div class="chart-axis"><span>' + money(max) + '</span><span>' + money(Math.round(max / 2)) + '</span><span>$ 0</span></div><div class="chart-body"><div class="chart-line top"></div><div class="chart-line middle"></div><div class="chart-line bottom"></div><div class="bars" role="img" aria-label="' + title + ' en ' + escapeHtml(monthLabel(selectedMonth)) + '">' + bars + '</div></div></div><p class="chart-footnote">Deslizá por cada semana para ver el total.</p>'
-      : '<div class="chart-empty">' + icon('chart', 26) + '<strong>Sin movimientos en este mes</strong><span>Elegí otro período o agregá un movimiento.</span></div>') + '</section>';
+      ? '<div class="chart-wrap"><div class="chart-axis"><span>' + money(max) + '</span><span>' + money(Math.round(max / 2)) + '</span><span>$ 0</span></div><div class="chart-body"><div class="chart-line top"></div><div class="chart-line middle"></div><div class="chart-line bottom"></div><div class="bars" role="img" aria-label="' + title + ' en ' + escapeHtml(monthLabel(selectedMonth)) + '">' + bars + '</div></div></div><p class="chart-footnote">Desliza por cada semana para ver el total.</p>'
+      : '<div class="chart-empty">' + icon('chart', 26) + '<strong>Sin movimientos en este mes</strong><span>Elige otro período o agrega un movimiento.</span></div>') + '</section>';
 }
 
 function breakdownData(items) {
@@ -505,14 +541,14 @@ function categoryBreakdown(items, label) {
   const list = top.length ? top.map(function (entry) {
     return '<li>' + (entry.id ? '<button class="legend-link" type="button" data-category-detail="' + escapeHtml(entry.id) + '" aria-label="Ver detalle de ' + escapeHtml(entry.name) + '">' : '<span class="legend-link">') + '<span class="legend-name"><span class="legend-dot ' + toneClass(entry.tone) + '"' + toneStyle(entry.tone) + '></span>' + escapeHtml(entry.name) + '</span><strong>' + money(entry.amount) + '</strong>' + (entry.id ? '</button>' : '</span>') + '</li>';
   }).join('') : '<li class="empty-legend">Todavía no hay gastos en este período.</li>';
-  return '<section class="panel breakdown-panel"><div class="panel-heading"><div><p class="section-eyebrow">EN QUÉ SE FUE</p><h2>Por categoría</h2></div><span class="panel-period">' + escapeHtml(label) + '</span></div><div class="breakdown-body">' + donutChart(top, breakdown.total, label, breakdown.total > 0, route === 'annual' ? 'annual' : 'month') + '<ul class="legend">' + list + '</ul></div>' + (breakdown.total > 0 ? '<p class="breakdown-hint">Tocá la rueda para ver el detalle.</p>' : '') + '</section>';
+  return '<section class="panel breakdown-panel"><div class="panel-heading"><div><p class="section-eyebrow">EN QUÉ SE FUE</p><h2>Por categoría</h2></div><span class="panel-period">' + escapeHtml(label) + '</span></div><div class="breakdown-body">' + donutChart(top, breakdown.total, label, breakdown.total > 0, route === 'annual' ? 'annual' : 'month') + '<ul class="legend">' + list + '</ul></div>' + (breakdown.total > 0 ? '<p class="breakdown-hint">Toca la rueda para ver el detalle.</p>' : '') + '</section>';
 }
 
 function transactionRow(item, compact) {
   const category = categoryById(item.categoryId);
   return '<button class="transaction-row' + (compact ? ' is-compact' : '') + '" type="button" data-edit-transaction="' + escapeHtml(item.id) + '">' +
     categoryIcon(category) +
-    '<span class="transaction-detail"><strong>' + escapeHtml(item.title) + '</strong><small>' + (item.note ? escapeHtml(item.note) + ' <span class="detail-separator">·</span> ' : '') + escapeHtml(category ? category.name : 'Sin categoría') + ' <span class="detail-separator">·</span> ' + prettyDate(item.date) + (isSavingsEntry(item) && savingsCurrency(item) !== 'ARS' ? ' <span class="detail-separator">·</span> ' + escapeHtml(formatSavings(savingsCurrency(item), savingsUnits(item))) + ' ahorrados' : '') + '</small></span>' +
+    '<span class="transaction-detail"><strong>' + escapeHtml(item.title) + '</strong><small>' + (item.note ? escapeHtml(item.note) + ' <span class="detail-separator">·</span> ' : '') + escapeHtml(category ? category.name : 'Sin categoría') + ' <span class="detail-separator">·</span> ' + prettyDate(item.date) + (isSavingsEntry(item) && savingsCurrency(item) !== 'CLP' ? ' <span class="detail-separator">·</span> ' + escapeHtml(formatSavings(savingsCurrency(item), savingsUnits(item))) + ' ahorrados' : '') + '</small></span>' +
     '<span class="transaction-amount ' + item.kind + '">' + (item.kind === 'income' ? '+ ' : '- ') + money(item.amount) + '</span>' +
     icon('arrowRight', 17) + '</button>';
 }
@@ -533,7 +569,7 @@ function renderHome() {
       metricCard('Ingresos del mes', t.income, 'income', 'arrowUp') +
       metricCard('Gastos del mes', t.expense, 'expense', 'arrowDown') +
       '<button class="add-card" data-action="add-transaction" type="button"><span class="add-card-icon">' + icon('plus', 25) + '</span><strong>Agregar movimiento</strong><small>Gasto o ingreso en segundos</small></button></div>' +
-    '<section class="period-bar"><div class="period-copy"><p class="section-eyebrow">ANÁLISIS MENSUAL</p><strong>Elegí un mes para ver sus gráficos</strong></div><div class="period-actions">' + periodPicker(true) + '<button class="period-annual-button" data-route="annual" type="button">Resumen anual ' + icon('arrowRight', 16) + '</button></div></section>' +
+    '<section class="period-bar"><div class="period-copy"><p class="section-eyebrow">ANÁLISIS MENSUAL</p><strong>Elige un mes para ver sus gráficos</strong></div><div class="period-actions">' + periodPicker(true) + '<button class="period-annual-button" data-route="annual" type="button">Resumen anual ' + icon('arrowRight', 16) + '</button></div></section>' +
     '<div class="home-grid">' + renderChart() + recentPanel() + categoryBreakdown() + '</div></div>';
 }
 
@@ -550,8 +586,8 @@ function annualChart(items) {
       '<span class="annual-bar-pair"><span class="annual-bar income" style="height:' + incomeHeight + '%"></span><span class="annual-bar expense" style="height:' + expenseHeight + '%"></span></span><span class="annual-month-label">' + monthNames[index] + '</span></button>';
   }).join('');
   return '<section class="panel annual-chart-panel"><div class="panel-heading"><div><p class="section-eyebrow">MES A MES</p><h2>Ingresos y gastos</h2></div><span class="panel-period">' + annualYear + '</span></div>' +
-    (items.length ? '<div class="annual-chart-scroll"><div class="annual-chart"><div class="annual-chart-grid"><span>' + shortMoney(maximum) + '</span><span>' + shortMoney(Math.round(maximum / 2)) + '</span><span>$ 0</span></div><div class="annual-columns" role="group" aria-label="Movimientos por mes en ' + annualYear + '">' + columns + '</div></div></div><div class="annual-chart-footer"><span class="annual-legend"><i class="income"></i> Ingresos <i class="expense"></i> Gastos</span><span>Tocá un mes para verlo en detalle.</span></div>'
-      : '<div class="chart-empty">' + icon('chart', 26) + '<strong>Sin movimientos en ' + annualYear + '</strong><span>Probá otro año o agregá un movimiento.</span></div>') + '</section>';
+    (items.length ? '<div class="annual-chart-scroll"><div class="annual-chart"><div class="annual-chart-grid"><span>' + shortMoney(maximum) + '</span><span>' + shortMoney(Math.round(maximum / 2)) + '</span><span>$ 0</span></div><div class="annual-columns" role="group" aria-label="Movimientos por mes en ' + annualYear + '">' + columns + '</div></div></div><div class="annual-chart-footer"><span class="annual-legend"><i class="income"></i> Ingresos <i class="expense"></i> Gastos</span><span>Toca un mes para verlo en detalle.</span></div>'
+      : '<div class="chart-empty">' + icon('chart', 26) + '<strong>Sin movimientos en ' + annualYear + '</strong><span>Prueba otro año o agrega un movimiento.</span></div>') + '</section>';
 }
 
 function renderAnnual() {
@@ -563,7 +599,7 @@ function renderAnnual() {
   const savingsValues = SAVINGS_CURRENCIES.concat(saved.EUR !== 0 ? [LEGACY_EUR] : []).filter(function (currency) { return saved[currency.code] !== 0; }).map(function (currency) {
     return '<strong>' + escapeHtml(formatSavings(currency.code, saved[currency.code])) + '</strong>';
   }).join('') || '<strong>Sin aportes</strong>';
-  return '<div class="annual-page">' + pageHeader('TODO EL AÑO', 'Resumen anual', 'Compará tus ingresos, gastos y ahorros durante el año.', '') +
+  return '<div class="annual-page">' + pageHeader('TODO EL AÑO', 'Resumen anual', 'Compara tus ingresos, gastos y ahorros durante el año.', '') +
     '<div class="annual-period-bar"><button class="period-annual-button" data-route="home" type="button">' + icon('chevronLeft', 16) + ' Volver al mes</button><div class="annual-year-controls"><button class="period-step" type="button" data-annual-year-shift="-1" aria-label="Año anterior">' + icon('chevronLeft', 17) + '</button><strong>' + annualYear + '</strong><button class="period-step" type="button" data-annual-year-shift="1" aria-label="Año siguiente">' + icon('arrowRight', 17) + '</button></div></div>' +
     '<div class="annual-stats">' + stat('Ingresos', income, 'income', 'arrowUp') + stat('Gastos', expense, 'expense', 'arrowDown') + stat('Resultado', income - expense, 'result', 'wallet') + '<div class="annual-stat savings"><span>' + icon('savings', 19) + ' Ahorro neto</span><div class="annual-savings-values">' + savingsValues + '</div></div></div>' +
     '<div class="annual-grid">' + annualChart(items) + categoryBreakdown(items, String(annualYear)) + '</div></div>';
@@ -579,17 +615,17 @@ function renderSavings() {
     return '<div class="savings-currency-row"><span class="savings-currency-code">' + currency.code + '</span><span class="savings-currency-name">' + currency.short + '</span><strong>' + escapeHtml(formatSavings(currency.code, saved[currency.code])) + '</strong></div>';
   }).join('');
   const actions = '<button class="button button-primary" data-action="add-savings" type="button">' + icon('plus', 18) + ' Agregar ahorro</button>';
-  return '<div class="savings-page">' + pageHeader('TU RESERVA', 'Ahorros', 'Anotá lo que separás y mirá cuánto llevás guardado.', actions) +
+  return '<div class="savings-page">' + pageHeader('TU RESERVA', 'Ahorros', 'Anota lo que separas y mira cuánto llevas guardado.', actions) +
     '<div class="savings-overview"><section class="savings-hero"><span class="savings-hero-icon">' + icon('savings', 24) + '</span><p>Tu ahorro, moneda por moneda</p><div class="savings-currency-list">' + currencyRows + '</div><span class="savings-no-conversion">Cada saldo se muestra por separado.</span><button class="button button-outline" data-action="withdraw-savings" type="button"' + (Object.values(saved).some(function (amount) { return amount > 0; }) ? '' : ' disabled') + '>Registrar retiro ' + icon('arrowRight', 16) + '</button></section>' +
-      '<section class="panel savings-explainer"><p class="section-eyebrow">CÓMO FUNCIONA</p><h2>Un gasto que suma a tus ahorros</h2><p>Cada aporte aparece como gasto en ARS en Movimientos. Si guardás dólares, cargás también cuánto te costaron en pesos. No se usa una cotización automática.</p><div class="savings-mini-stats"><div><span>Aportes</span><strong>' + deposits + '</strong></div><div><span>Retiros</span><strong>' + withdrawals + '</strong></div></div></section></div>' +
-    '<section class="panel savings-history"><div class="panel-heading"><div><p class="section-eyebrow">HISTORIAL</p><h2>Aportes y retiros</h2></div><span class="panel-period">Todos los meses</span></div><div class="transaction-list">' + (items.length ? items.map(savingsRow).join('') : '<div class="empty-state"><strong>Todavía no anotaste ahorros</strong><span>Agregá un aporte para empezar.</span></div>') + '</div></section></div>';
+      '<section class="panel savings-explainer"><p class="section-eyebrow">CÓMO FUNCIONA</p><h2>Un gasto que suma a tus ahorros</h2><p>Cada aporte aparece como gasto en CLP en Movimientos. Si guardas dólares, cargas también cuánto te costaron en pesos. No se usa una cotización automática.</p><div class="savings-mini-stats"><div><span>Aportes</span><strong>' + deposits + '</strong></div><div><span>Retiros</span><strong>' + withdrawals + '</strong></div></div></section></div>' +
+    '<section class="panel savings-history"><div class="panel-heading"><div><p class="section-eyebrow">HISTORIAL</p><h2>Aportes y retiros</h2></div><span class="panel-period">Todos los meses</span></div><div class="transaction-list">' + (items.length ? items.map(savingsRow).join('') : '<div class="empty-state"><strong>Todavía no anotaste ahorros</strong><span>Agrega un aporte para empezar.</span></div>') + '</div></section></div>';
 }
 
 function savingsRow(item) {
   const currency = savingsCurrency(item);
   const deposit = item.categoryId === 'savings';
   return '<button class="transaction-row savings-row" type="button" data-edit-savings="' + escapeHtml(item.id) + '">' + categoryIcon(categoryById(item.categoryId)) +
-    '<span class="transaction-detail"><strong>' + escapeHtml(item.title) + '</strong><small>' + (deposit ? 'Aporte' : 'Retiro') + ' <span class="detail-separator">·</span> ' + prettyDate(item.date) + ' <span class="detail-separator">·</span> ' + (deposit ? 'Gastaste ' : 'Recibiste ') + money(item.amount) + ' ARS</small></span>' +
+    '<span class="transaction-detail"><strong>' + escapeHtml(item.title) + '</strong><small>' + (deposit ? 'Aporte' : 'Retiro') + ' <span class="detail-separator">·</span> ' + prettyDate(item.date) + ' <span class="detail-separator">·</span> ' + (deposit ? 'Gastaste ' : 'Recibiste ') + money(item.amount) + ' CLP</small></span>' +
     '<span class="transaction-amount ' + (deposit ? 'income' : 'expense') + '">' + (deposit ? '+ ' : '- ') + escapeHtml(formatSavings(currency, savingsUnits(item))) + '</span>' + icon('arrowRight', 17) + '</button>';
 }
 
@@ -597,11 +633,11 @@ function renderTransactions() {
   const visible = selectedTransactions().filter(function (item) {
     const category = categoryById(item.categoryId);
     const matchesFilter = filter === 'all' || item.kind === filter;
-    const matchesQuery = !query || (item.title + ' ' + (category ? category.name : '')).toLocaleLowerCase('es-AR').includes(query.toLocaleLowerCase('es-AR'));
+    const matchesQuery = !query || (item.title + ' ' + (category ? category.name : '')).toLocaleLowerCase('es-CL').includes(query.toLocaleLowerCase('es-CL'));
     return matchesFilter && matchesQuery;
   });
   const actions = '<button class="button button-primary" data-action="add-transaction" type="button">' + icon('plus', 18) + ' Agregar movimiento</button>';
-  return pageHeader('TU HISTORIAL', 'Movimientos', 'Encontrá y editá cada ingreso o gasto.', actions, 'transactions-header') +
+  return pageHeader('TU HISTORIAL', 'Movimientos', 'Encuentra y edita cada ingreso o gasto.', actions, 'transactions-header') +
     '<div class="section-toolbar"><div class="filter-tabs" role="group" aria-label="Tipo de movimiento">' +
       ['all', 'expense', 'income'].map(function (value) {
         const label = { all: 'Todos', expense: 'Gastos', income: 'Ingresos' }[value];
@@ -609,7 +645,7 @@ function renderTransactions() {
       }).join('') + '</div>' +
       '<div class="toolbar-right"><label class="search-field">' + icon('search', 17) + '<input id="transaction-search" placeholder="Buscar movimiento" value="' + escapeHtml(query) + '" aria-label="Buscar movimiento" /></label>' + periodPicker(false) + '</div></div>' +
     '<section class="panel all-transactions"><div class="list-heading"><span>Movimiento</span><span>Categoría</span><span>Fecha</span><span>Importe</span></div>' +
-      '<div class="transaction-list">' + (visible.length ? visible.map(function (item) { return transactionRow(item, false); }).join('') : '<div class="empty-state"><strong>Sin movimientos para mostrar</strong><span>Probá otro mes o agregá uno nuevo.</span></div>') + '</div></section>';
+      '<div class="transaction-list">' + (visible.length ? visible.map(function (item) { return transactionRow(item, false); }).join('') : '<div class="empty-state"><strong>Sin movimientos para mostrar</strong><span>Prueba otro mes o agrega uno nuevo.</span></div>') + '</div></section>';
 }
 
 function categoryRow(category, index, list) {
@@ -625,21 +661,21 @@ function categoryRow(category, index, list) {
 
 function renderCategories() {
   const list = data.categories.filter(function (category) { return category.kind === categoryKind; });
-  return pageHeader('A TU MANERA', 'Categorías', 'Cambiá los nombres y el orden cuando quieras.',
+  return pageHeader('A TU MANERA', 'Categorías', 'Cambia los nombres y el orden cuando quieras.',
     '<button class="button button-primary" data-action="add-category" type="button">' + icon('plus', 17) + ' Nueva categoría</button>') +
     '<div class="section-toolbar"><div class="filter-tabs" role="group" aria-label="Tipo de categoría">' +
       '<button type="button" data-category-kind="expense" class="' + (categoryKind === 'expense' ? 'selected' : '') + '">Gastos</button>' +
       '<button type="button" data-category-kind="income" class="' + (categoryKind === 'income' ? 'selected' : '') + '">Ingresos</button></div>' +
-      '<p class="reorder-hint">' + icon('grip', 17) + ' Arrastrá en PC o usá las flechas en el iPhone.</p></div>' +
+      '<p class="reorder-hint">' + icon('grip', 17) + ' Arrastra en PC o usa las flechas en el iPhone.</p></div>' +
     '<section class="panel category-panel"><div class="category-list">' + list.map(function (category, index) { return categoryRow(category, index, list); }).join('') + '</div></section>' +
-    '<div class="info-banner">' + icon('info', 19) + '<div><strong>¿Querés mover un gasto?</strong><span>Entrá en Movimientos, tocá el gasto y elegí otra categoría.</span></div><button class="text-button" data-route="transactions" type="button">Ir a movimientos ' + icon('arrowRight', 15) + '</button></div>';
+    '<div class="info-banner">' + icon('info', 19) + '<div><strong>¿Quieres mover un gasto?</strong><span>Entra en Movimientos, toca el gasto y elige otra categoría.</span></div><button class="text-button" data-route="transactions" type="button">Ir a movimientos ' + icon('arrowRight', 15) + '</button></div>';
 }
 
 function renderCategoryDetail() {
   const category = categoryById(selectedCategoryId);
   if (!category) return renderCategories();
   const items = selectedTransactions().filter(function (item) { return item.categoryId === category.id; });
-  const groups = conceptGroups(category.id, items).sort(function (a, b) { return b.total - a.total || a.title.localeCompare(b.title, 'es-AR'); });
+  const groups = conceptGroups(category.id, items).sort(function (a, b) { return b.total - a.total || a.title.localeCompare(b.title, 'es-CL'); });
   const allGroups = conceptGroups(category.id);
   if (conceptFilter && !groups.some(function (group) { return group.key === conceptFilter; })) conceptFilter = null;
   const total = items.reduce(function (sum, item) { return sum + item.amount; }, 0);
@@ -649,14 +685,14 @@ function renderCategoryDetail() {
     const percent = total ? Math.round(group.total / total * 100) : 0;
     const percentLabel = group.total > 0 && percent === 0 ? '&lt;1%' : percent + '%';
     return '<button class="concept-row' + (conceptFilter === group.key ? ' selected' : '') + '" type="button" data-concept-filter="' + escapeHtml(group.key) + '" aria-pressed="' + String(conceptFilter === group.key) + '"><span class="concept-row-head"><strong>' + escapeHtml(group.title) + '</strong><span>' + money(group.total) + ' <small>' + percentLabel + '</small></span></span><span class="concept-track"><span style="width:' + (group.total / total * 100).toFixed(1) + '%"></span></span><small>' + group.count + (group.count === 1 ? ' movimiento' : ' movimientos') + '</small></button>';
-  }).join('') : '<div class="chart-empty">' + icon('chart', 26) + '<strong>Sin movimientos en este mes</strong><span>Elegí otro período o agregá uno nuevo.</span></div>';
+  }).join('') : '<div class="chart-empty">' + icon('chart', 26) + '<strong>Sin movimientos en este mes</strong><span>Elige otro período o agrega uno nuevo.</span></div>';
   return '<div class="category-detail-page" style="--category-accent:' + toneColor(category.tone) + '">' +
     '<button class="back-button category-back" data-route="categories" type="button">' + icon('chevronLeft', 17) + ' Categorías</button>' +
-    pageHeader('ANÁLISIS DE CATEGORÍA', escapeHtml(category.name), category.kind === 'income' ? 'Mirá de dónde vienen tus ingresos.' : 'Descubrí en qué se fue el dinero.', '<button class="button button-primary" type="button" data-add-category-transaction="' + escapeHtml(category.id) + '">' + icon('plus', 17) + ' Agregar movimiento</button>') +
-    '<section class="period-bar category-period"><div class="period-copy"><p class="section-eyebrow">PERÍODO</p><strong>Elegí un mes para analizar</strong></div>' + periodPicker(true) + '</section>' +
+    pageHeader('ANÁLISIS DE CATEGORÍA', escapeHtml(category.name), category.kind === 'income' ? 'Mira de dónde vienen tus ingresos.' : 'Descubre en qué se fue el dinero.', '<button class="button button-primary" type="button" data-add-category-transaction="' + escapeHtml(category.id) + '">' + icon('plus', 17) + ' Agregar movimiento</button>') +
+    '<section class="period-bar category-period"><div class="period-copy"><p class="section-eyebrow">PERÍODO</p><strong>Elige un mes para analizar</strong></div>' + periodPicker(true) + '</section>' +
     '<div class="category-stats"><div class="category-total">' + categoryIcon(category, 23) + '<span>' + (category.kind === 'income' ? 'Ingresos del mes' : 'Gastos del mes') + '</span><strong>' + money(total) + '</strong></div><div><span>Movimientos</span><strong>' + items.length + '</strong></div><div><span>Comercios o conceptos</span><strong>' + groups.length + '</strong></div></div>' +
     '<div class="category-detail-grid">' + renderChart(shownItems, selectedGroup ? escapeHtml(selectedGroup.title) + ' por semana' : category.kind === 'income' ? 'Ingresos por semana' : 'Gastos por semana') +
-    '<section class="panel concepts-panel"><div class="panel-heading"><div><p class="section-eyebrow">DENTRO DE ' + escapeHtml(category.name.toLocaleUpperCase('es-AR')) + '</p><h2>Por comercio o concepto</h2></div>' + (allGroups.length > 1 ? '<button class="text-button" type="button" data-action="merge-concepts">Unir nombres</button>' : '') + '</div><div class="concept-list">' + groupRows + '</div></section></div>' +
+    '<section class="panel concepts-panel"><div class="panel-heading"><div><p class="section-eyebrow">DENTRO DE ' + escapeHtml(category.name.toLocaleUpperCase('es-CL')) + '</p><h2>Por comercio o concepto</h2></div>' + (allGroups.length > 1 ? '<button class="text-button" type="button" data-action="merge-concepts">Unir nombres</button>' : '') + '</div><div class="concept-list">' + groupRows + '</div></section></div>' +
     '<section class="panel category-history"><div class="panel-heading"><div><p class="section-eyebrow">HISTORIAL</p><h2>' + (selectedGroup ? escapeHtml(selectedGroup.title) : 'Movimientos del mes') + '</h2></div>' + (selectedGroup ? '<button class="text-button" data-concept-filter="" type="button">Ver todos</button>' : '<span class="panel-period">' + items.length + (items.length === 1 ? ' movimiento' : ' movimientos') + '</span>') + '</div><div class="transaction-list">' + (shownItems.length ? shownItems.map(function (item) { return transactionRow(item, false); }).join('') : '<div class="empty-state">No hay movimientos en este período.</div>') + '</div></section></div>';
 }
 
@@ -666,25 +702,25 @@ function renderSettings() {
       return '<div class="linked-device"><span>' + icon('phone', 19) + '<strong>' + escapeHtml(device.name) + '</strong></span><button class="text-button" data-revoke-device="' + escapeHtml(device.id) + '" type="button">Revocar</button></div>';
     }).join('');
     return pageHeader('PREFERENCIAS', 'Ajustes', 'Tu dinero y tus dispositivos, bajo tu control.', '') +
-      '<div class="settings-grid"><section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('sun', 20) + '</span><div><h2>Apariencia</h2><p>Elegí cómo querés ver MisGastos.</p></div></div>' +
+      '<div class="settings-grid"><section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('sun', 20) + '</span><div><h2>Apariencia</h2><p>Elige cómo quieres ver MisGastos.</p></div></div>' +
         '<div class="theme-options"><button type="button" data-theme-option="light" class="theme-option' + (data.theme === 'light' ? ' selected' : '') + '"><span class="theme-swatch light-swatch"></span><span><strong>Claro</strong><small>Marfil y colores suaves</small></span>' + (data.theme === 'light' ? icon('check', 18) : '') + '</button>' +
         '<button type="button" data-theme-option="dark" class="theme-option' + (data.theme === 'dark' ? ' selected' : '') + '"><span class="theme-swatch dark-swatch"></span><span><strong>Oscuro</strong><small>Grafito y contraste sereno</small></span>' + (data.theme === 'dark' ? icon('check', 18) : '') + '</button></div></section>' +
       '<section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('wallet', 20) + '</span><div><h2>Saldo inicial</h2><p>' + money(data.openingBalance) + '</p></div></div><button class="setting-action" data-action="edit-opening-balance" type="button"><span>' + icon('edit', 18) + ' Cambiar saldo inicial</span>' + icon('arrowRight', 18) + '</button></section>' +
-      '<section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('phone', 20) + '</span><div><h2>Tu iPhone</h2><p>' + (DESKTOP ? 'Vinculá y revocá dispositivos desde esta PC.' : 'Este celular está vinculado a tu PC.') + '</p></div></div>' +
+      '<section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('phone', 20) + '</span><div><h2>Tu iPhone</h2><p>' + (DESKTOP ? 'Vincula y revoca dispositivos desde esta PC.' : 'Este celular está vinculado a tu PC.') + '</p></div></div>' +
         (DESKTOP ? '<button class="setting-action" data-action="show-qr" type="button"><span>' + icon('qr', 18) + ' Conectar iPhone con QR</span>' + icon('arrowRight', 18) + '</button>' + (devices || '<p class="settings-note">Todavía no hay celulares vinculados.</p>') : '') + '</section>' +
-      (DESKTOP ? '<section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('sparkles', 20) + '</span><div><h2>Discord</h2><p>Mandá capturas o mensajes y revisá la propuesta antes de guardar.</p></div></div>' +
+      (DESKTOP ? '<section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('sparkles', 20) + '</span><div><h2>Discord</h2><p>Manda capturas o mensajes y revisa la propuesta antes de guardar.</p></div></div>' +
         '<button class="setting-action" data-action="discord-config" type="button"><span>' + icon('edit', 18) + ' Configurar bot</span>' + icon('arrowRight', 18) + '</button>' +
         '<p class="settings-note">Estado: ' + escapeHtml(desktopInfo.discord?.status || 'desconectado') + (desktopInfo.discord?.detail ? ' · ' + escapeHtml(desktopInfo.discord.detail) : '') + '</p></section>' : '') +
-      (DESKTOP ? '<section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('download', 20) + '</span><div><h2>Copias de seguridad</h2><p>Se guarda una copia local diaria cuando cambiás datos.</p></div></div>' +
+      (DESKTOP ? '<section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('download', 20) + '</span><div><h2>Copias de seguridad</h2><p>Se guarda una copia local diaria cuando cambias datos.</p></div></div>' +
         '<button class="setting-action" data-action="export-data" type="button"><span>' + icon('download', 18) + ' Exportar mis datos</span>' + icon('arrowRight', 18) + '</button>' +
         '<button class="setting-action" data-action="restore-data" type="button"><span>' + icon('reset', 18) + ' Restaurar una copia</span>' + icon('arrowRight', 18) + '</button><input id="restore-file" type="file" accept=".json,application/json" hidden />' +
         '<p class="settings-note">Copias automáticas en ' + escapeHtml(desktopInfo.backupDir || 'la carpeta de datos de MisGastos') + '</p></section>' : '') + '</div>';
   }
-  return pageHeader('PREFERENCIAS', 'Ajustes', 'Personalizá esta vista previa y probá el enlace con tu iPhone.', '') +
-    '<div class="settings-grid"><section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('sun', 20) + '</span><div><h2>Apariencia</h2><p>Elegí cómo querés ver MisGastos.</p></div></div>' +
+  return pageHeader('PREFERENCIAS', 'Ajustes', 'Personaliza esta vista previa y prueba el enlace con tu iPhone.', '') +
+    '<div class="settings-grid"><section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('sun', 20) + '</span><div><h2>Apariencia</h2><p>Elige cómo quieres ver MisGastos.</p></div></div>' +
       '<div class="theme-options"><button type="button" data-theme-option="light" class="theme-option' + (data.theme === 'light' ? ' selected' : '') + '"><span class="theme-swatch light-swatch"></span><span><strong>Claro</strong><small>Marfil y colores suaves</small></span>' + (data.theme === 'light' ? icon('check', 18) : '') + '</button>' +
       '<button type="button" data-theme-option="dark" class="theme-option' + (data.theme === 'dark' ? ' selected' : '') + '"><span class="theme-swatch dark-swatch"></span><span><strong>Oscuro</strong><small>Grafito y contraste sereno</small></span>' + (data.theme === 'dark' ? icon('check', 18) : '') + '</button></div></section>' +
-    '<section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('phone', 20) + '</span><div><h2>Tu iPhone</h2><p>' + (data.linked ? 'iPhone vinculado en esta demostración.' : 'Probá cómo sería el primer enlace por QR.') + '</p></div></div>' +
+    '<section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('phone', 20) + '</span><div><h2>Tu iPhone</h2><p>' + (data.linked ? 'iPhone vinculado en esta demostración.' : 'Prueba cómo sería el primer enlace por QR.') + '</p></div></div>' +
       '<button class="setting-action" data-action="open-pair" type="button"><span>' + icon('qr', 18) + ' Ver flujo de vinculación</span>' + icon('arrowRight', 18) + '</button>' +
       '<button class="setting-action" data-action="show-qr" type="button"><span>' + icon('phone', 18) + ' Ver QR en la PC</span>' + icon('arrowRight', 18) + '</button></section>' +
     '<section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('reset', 20) + '</span><div><h2>Datos de demostración</h2><p>Son ficticios y se guardan solo en este navegador.</p></div></div>' +
@@ -716,12 +752,12 @@ function qrMarkup() {
 
 function renderPairPage() {
   const content = pairingStep === 'start'
-    ? '<p>Escaneá el QR que muestra MisGastos en tu PC o ingresá el código manualmente.</p><div class="scanner-preview"><div class="scan-corners">' + icon('qr', 90) + '</div><span>Vista de cámara simulada</span></div>' +
+    ? '<p>Escanea el QR que muestra MisGastos en tu PC o ingresa el código manualmente.</p><div class="scanner-preview"><div class="scan-corners">' + icon('qr', 90) + '</div><span>Vista de cámara simulada</span></div>' +
       '<form id="pair-form" novalidate><label class="field-label" for="pair-code">Código de vinculación</label><input class="text-input pair-code" id="pair-code" name="code" autocomplete="off" maxlength="8" placeholder="A7F3K9M2" required />' +
       '<button class="button button-primary full-width" type="submit">Continuar ' + icon('arrowRight', 17) + '</button></form>'
     : pairingStep === 'pending'
       ? '<div class="pair-status-symbol">' + icon('phone', 35) + '</div><h2>Esperando aprobación</h2><p>En la PC aparecería una solicitud para permitir el acceso de este iPhone.</p><button class="button button-primary full-width" data-action="simulate-approval" type="button">Simular aprobación en PC</button>'
-      : '<div class="pair-status-symbol success">' + icon('check', 38) + '</div><h2>iPhone vinculado</h2><p>En la app real, tus movimientos aparecerían acá al conectarte con tu PC.</p><button class="button button-primary full-width" data-route="home" type="button">Volver al inicio</button>';
+      : '<div class="pair-status-symbol success">' + icon('check', 38) + '</div><h2>iPhone vinculado</h2><p>En la app real, tus movimientos aparecerían aquí al conectarte con tu PC.</p><button class="button button-primary full-width" data-route="home" type="button">Volver al inicio</button>';
   return '<div class="pair-page"><button class="back-button" data-route="settings" type="button">' + icon('chevronLeft', 18) + ' Ajustes</button>' +
     '<p class="eyebrow">ACCESO MÓVIL</p><h1>Vincular con tu PC</h1>' + content +
     '<div class="pair-demo-note">' + icon('info', 17) + '<span>Demostración visual. Todavía no se activa la cámara ni se enlazan dispositivos.</span></div></div>';
@@ -735,7 +771,7 @@ function transactionModal() {
   return '<div class="modal-backdrop" data-action="close-modal"></div><div class="dialog transaction-dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">' +
     '<div class="dialog-head"><div><p class="eyebrow">MOVIMIENTO</p><h2 id="dialog-title">' + (item ? 'Editar movimiento' : 'Agregar movimiento') + '</h2></div><button class="icon-button" data-action="close-modal" type="button" aria-label="Cerrar">' + icon('close', 20) + '</button></div>' +
     '<form id="transaction-form" novalidate><div class="kind-switch"><button type="button" data-modal-kind="expense" class="' + (kind === 'expense' ? 'selected' : '') + '">Gasto</button><button type="button" data-modal-kind="income" class="' + (kind === 'income' ? 'selected' : '') + '">Ingreso</button></div>' +
-    '<label class="field-label" for="amount">Monto</label><div class="amount-input"><span>$</span><input id="amount" name="amount" inputmode="numeric" type="number" min="1" step="1" value="' + (item ? item.amount : '') + '" placeholder="0" required autofocus /></div>' +
+    '<label class="field-label" for="amount">Monto</label><div class="amount-input"><span>$</span><input id="amount" name="amount" inputmode="numeric" type="text" autocomplete="off" data-amount-input value="' + (item ? formatAmountValue(item.amount) : '') + '" placeholder="0" required autofocus /></div>' +
     '<label class="field-label" for="title">Descripción</label><div class="description-autocomplete"><input class="text-input" id="title" name="title" maxlength="80" autocomplete="off" aria-autocomplete="list" aria-expanded="false" aria-controls="description-suggestions" value="' + escapeHtml(item ? item.title : '') + '" placeholder="' + (kind === 'income' ? '¿De dónde vino el ingreso?' : '¿En qué gastaste?') + '" required /><div id="description-suggestions" class="description-suggestions" role="listbox" hidden></div></div>' +
     '<label class="field-label" for="transaction-note">Detalle <span class="field-optional">(opcional)</span></label><input class="text-input" id="transaction-note" name="note" maxlength="160" value="' + escapeHtml(item ? item.note || '' : '') + '" placeholder="Ejemplo: latte y medialuna" />' +
     '<div class="form-row"><div>' + customSelect('category-picker', 'Categoría', 'category', item ? item.categoryId : modal.categoryId || '', categories.map(function (category) {
@@ -770,7 +806,7 @@ function savingsModal() {
   const item = modal.id ? data.transactions.find(function (entry) { return entry.id === modal.id; }) : null;
   const action = item ? (item.categoryId === 'savings' ? 'deposit' : 'withdrawal') : modal.action;
   const deposit = action === 'deposit';
-  const currency = item ? savingsCurrency(item) : 'ARS';
+  const currency = item ? savingsCurrency(item) : 'CLP';
   const date = item ? item.date : lastDateOfMonth(selectedMonth);
   const balances = savingsBalances();
   const availableCurrencies = SAVINGS_CURRENCIES.concat((currency === 'EUR' && item) || (!deposit && balances.EUR > 0) ? [LEGACY_EUR] : []);
@@ -779,10 +815,10 @@ function savingsModal() {
   });
   return '<div class="modal-backdrop" data-action="close-modal"></div><div class="dialog savings-dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">' +
     '<div class="dialog-head"><div><p class="eyebrow">AHORROS</p><h2 id="dialog-title">' + (item ? deposit ? 'Editar aporte' : 'Editar retiro' : deposit ? 'Agregar ahorro' : 'Retirar de ahorros') + '</h2></div><button class="icon-button" data-action="close-modal" type="button" aria-label="Cerrar">' + icon('close', 20) + '</button></div>' +
-    '<form id="savings-form" novalidate><p class="savings-form-note">' + (deposit ? 'Se anotará como gasto en ARS y aumentará el ahorro en la moneda elegida.' : 'Se anotará como ingreso en ARS y disminuirá el ahorro en la moneda elegida.') + '</p>' +
+    '<form id="savings-form" novalidate><p class="savings-form-note">' + (deposit ? 'Se anotará como gasto en CLP y aumentará el ahorro en la moneda elegida.' : 'Se anotará como ingreso en CLP y disminuirá el ahorro en la moneda elegida.') + '</p>' +
     customSelect('savings-currency', 'Moneda del ahorro', 'currency', currency, choices, 'form-dropdown') +
-    '<label class="field-label" for="savings-units">' + (deposit ? 'Monto que guardás' : 'Monto que retirás') + '</label><div class="amount-input"><span data-savings-currency-symbol>' + (currency === 'USD' ? 'US$' : currency === 'EUR' ? '€' : '$') + '</span><input id="savings-units" name="units" inputmode="decimal" type="number" min="0.01" step="0.01" value="' + (item ? savingsUnits(item) : '') + '" placeholder="0" required autofocus /></div>' +
-    '<div data-foreign-cost' + (currency === 'ARS' ? ' hidden' : '') + '><label class="field-label" for="savings-ars-amount">' + (deposit ? 'Costo en pesos (ARS)' : 'Pesos recibidos (ARS)') + '</label><div class="amount-input"><span>$</span><input id="savings-ars-amount" name="arsAmount" inputmode="numeric" type="number" min="1" step="1" value="' + (item && currency !== 'ARS' ? item.amount : '') + '" placeholder="0"' + (currency === 'ARS' ? '' : ' required') + ' /></div><p class="field-help">Ingresá el importe real. No se aplica una cotización automática.</p></div>' +
+    '<label class="field-label" for="savings-units">' + (deposit ? 'Monto que guardas' : 'Monto que retiras') + '</label><div class="amount-input"><span data-savings-currency-symbol>' + (currency === 'USD' ? 'US$' : currency === 'EUR' ? '€' : '$') + '</span><input id="savings-units" name="units" inputmode="decimal" type="text" autocomplete="off" data-amount-input data-amount-decimals value="' + (item ? formatAmountValue(savingsUnits(item)) : '') + '" placeholder="0" required autofocus /></div>' +
+    '<div data-foreign-cost' + (currency === 'CLP' ? ' hidden' : '') + '><label class="field-label" for="savings-ars-amount">' + (deposit ? 'Costo en pesos (CLP)' : 'Pesos recibidos (CLP)') + '</label><div class="amount-input"><span>$</span><input id="savings-ars-amount" name="arsAmount" inputmode="numeric" type="text" autocomplete="off" data-amount-input value="' + (item && currency !== 'CLP' ? formatAmountValue(item.amount) : '') + '" placeholder="0"' + (currency === 'CLP' ? '' : ' required') + ' /></div><p class="field-help">Ingresa el importe real. No se aplica una cotización automática.</p></div>' +
     '<label class="field-label" for="savings-title">Descripción</label><input class="text-input" id="savings-title" name="title" maxlength="80" value="' + escapeHtml(item ? item.title : '') + '" placeholder="' + (deposit ? 'Ejemplo: Fondo de emergencia' : 'Ejemplo: Retiro para imprevisto') + '" required />' +
     datePicker(date) +
     (item ? '<button class="text-button savings-move-button" type="button" data-action="move-savings-category">Mover a otra categoría ' + icon('arrowRight', 15) + '</button>' : '') +
@@ -818,16 +854,16 @@ function qrModal() {
     const networks = desktopInfo.networks.map(function (option) { return '<button class="network-option' + (selectedNetwork === option.address ? ' selected' : '') + '" data-pair-address="' + escapeHtml(option.address) + '" type="button">' + escapeHtml(option.label) + '</button>'; }).join('');
     return '<div class="modal-backdrop" data-action="close-modal"></div><div class="dialog qr-dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">' +
       '<div class="dialog-head"><div><p class="eyebrow">ACCESO MÓVIL</p><h2 id="dialog-title">Conectar iPhone</h2></div><button class="icon-button" data-action="close-modal" type="button" aria-label="Cerrar">' + icon('close', 20) + '</button></div>' +
-      (request ? '<div class="approval-icon">' + icon('phone', 30) + '</div><p class="qr-intro"><strong>' + escapeHtml(request.name) + '</strong> solicita acceso a tus gastos. Permití el acceso solo si es tu celular.</p><div class="approval-actions"><button class="button button-outline" data-pair-decision="deny" data-request-id="' + escapeHtml(request.id) + '" type="button">Rechazar</button><button class="button button-primary" data-pair-decision="approve" data-request-id="' + escapeHtml(request.id) + '" type="button">Permitir acceso</button></div>' :
-      '<p class="qr-intro">Elegí la conexión, escaneá el QR con Safari y aprobá la solicitud en esta PC.</p><div class="network-options">' + (networks || '<p>Conectá la PC a Wi-Fi o Tailscale para generar el QR.</p>') + '</div>' +
-      (pairingInfo ? '<div class="qr-wrap"><img class="real-qr" src="' + pairingInfo.qr + '" alt="QR para vincular el iPhone" /></div><p class="pair-url">' + escapeHtml(pairingInfo.url) + '</p><p class="qr-disclaimer">Este QR vence en 5 minutos. Fuera de casa, usá Tailscale en la PC y el iPhone.</p>' : '<p class="qr-disclaimer">Preparando QR...</p>')) + '</div>';
+      (request ? '<div class="approval-icon">' + icon('phone', 30) + '</div><p class="qr-intro"><strong>' + escapeHtml(request.name) + '</strong> solicita acceso a tus gastos. Permite el acceso solo si es tu celular.</p><div class="approval-actions"><button class="button button-outline" data-pair-decision="deny" data-request-id="' + escapeHtml(request.id) + '" type="button">Rechazar</button><button class="button button-primary" data-pair-decision="approve" data-request-id="' + escapeHtml(request.id) + '" type="button">Permitir acceso</button></div>' :
+      '<p class="qr-intro">Elige la conexión, escanea el QR con Safari y aprueba la solicitud en esta PC.</p><div class="network-options">' + (networks || '<p>Conecta la PC a Wi-Fi o Tailscale para generar el QR.</p>') + '</div>' +
+      (pairingInfo ? '<div class="qr-wrap"><img class="real-qr" src="' + pairingInfo.qr + '" alt="QR para vincular el iPhone" /></div><p class="pair-url">' + escapeHtml(pairingInfo.url) + '</p><p class="qr-disclaimer">Este QR vence en 5 minutos. Fuera de casa, usa Tailscale en la PC y el iPhone.</p>' : '<p class="qr-disclaimer">Preparando QR...</p>')) + '</div>';
   }
   const pending = pairingStep === 'desktop-pending';
   return '<div class="modal-backdrop" data-action="close-modal"></div><div class="dialog qr-dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">' +
     '<div class="dialog-head"><div><p class="eyebrow">ACCESO MÓVIL</p><h2 id="dialog-title">' + (pending ? 'Solicitud de iPhone' : 'Conectar iPhone') + '</h2></div><button class="icon-button" data-action="close-modal" type="button" aria-label="Cerrar">' + icon('close', 20) + '</button></div>' +
     (pending
       ? '<div class="approval-icon">' + icon('phone', 30) + '</div><p class="qr-intro">Un iPhone solicita acceso a MisGastos. En la app real, aprobarías un dispositivo concreto desde esta ventana.</p><div class="approval-actions"><button class="button button-outline" data-action="deny-pair" type="button">Rechazar</button><button class="button button-primary" data-action="approve-pair" type="button">Permitir acceso</button></div>'
-      : '<p class="qr-intro">Escaneá este código desde tu iPhone y aprobá la solicitud en esta PC.</p><div class="qr-wrap">' + qrMarkup() + '</div><div class="pair-code-display"><small>CÓDIGO MANUAL</small><strong>' + QR_CODE + '</strong></div>' +
+      : '<p class="qr-intro">Escanea este código desde tu iPhone y aprueba la solicitud en esta PC.</p><div class="qr-wrap">' + qrMarkup() + '</div><div class="pair-code-display"><small>CÓDIGO MANUAL</small><strong>' + QR_CODE + '</strong></div>' +
         '<button class="button button-outline full-width" data-action="simulate-request" type="button">Simular solicitud desde el iPhone</button><p class="qr-disclaimer">QR ilustrativo. El enlace real se implementará después de aprobar el diseño.</p>') +
     '</div>';
 }
@@ -840,9 +876,9 @@ function confirmationModal() {
   const description = modal.action === 'reset'
     ? 'Se descartarán los cambios que hiciste en esta demostración y volverán los datos originales.'
     : modal.action === 'restore' ? 'Se reemplazarán los datos actuales por los de la copia elegida. Antes se guardará una copia automática de seguridad.'
-    : device ? '¿Querés quitar el acceso de "' + escapeHtml(device.name) + '"? Tendrás que vincularlo otra vez por QR.'
-    : item ? '¿Querés eliminar "' + escapeHtml(item.title) + '"? Este movimiento dejará de aparecer en el saldo y los gráficos.'
-    : '¿Querés eliminar la categoría "' + escapeHtml(category ? category.name : '') + '"?';
+    : device ? '¿Quieres quitar el acceso de "' + escapeHtml(device.name) + '"? Tendrás que vincularlo otra vez por QR.'
+    : item ? '¿Quieres eliminar "' + escapeHtml(item.title) + '"? Este movimiento dejará de aparecer en el saldo y los gráficos.'
+    : '¿Quieres eliminar la categoría "' + escapeHtml(category ? category.name : '') + '"?';
   const actionLabel = modal.action === 'reset' ? 'Restaurar ejemplo' : modal.action === 'restore' ? 'Restaurar copia' : device ? 'Revocar acceso' : 'Eliminar';
   return '<div class="modal-backdrop" data-action="cancel-confirm"></div><div class="dialog confirmation-dialog" role="alertdialog" aria-modal="true" aria-labelledby="dialog-title" aria-describedby="confirm-description">' +
     '<div class="dialog-head"><div><p class="eyebrow">CONFIRMACIÓN</p><h2 id="dialog-title">' + title + '</h2></div><button class="icon-button" data-action="cancel-confirm" type="button" aria-label="Cerrar">' + icon('close', 20) + '</button></div>' +
@@ -853,9 +889,9 @@ function discordModal() {
   const settings = desktopInfo.discord || {};
   return '<div class="modal-backdrop" data-action="close-modal"></div><div class="dialog discord-dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">' +
     '<div class="dialog-head"><div><p class="eyebrow">CARGA RÁPIDA</p><h2 id="dialog-title">Bot de Discord</h2></div><button class="icon-button" data-action="close-modal" type="button" aria-label="Cerrar">' + icon('close', 20) + '</button></div>' +
-    '<p class="settings-note">Usá un canal privado del servidor MisGastos. El bot solo leerá ese canal y solo aceptará mensajes del dueño del servidor.</p>' +
+    '<p class="settings-note">Usa un canal privado del servidor MisGastos. El bot solo leerá ese canal y solo aceptará mensajes del dueño del servidor.</p>' +
     '<form id="discord-form"><label class="field-label" for="discord-channel">ID del canal</label><input class="text-input" id="discord-channel" name="channelId" inputmode="numeric" value="' + escapeHtml(settings.channelId || '') + '" placeholder="Copiar ID del canal en Discord" required />' +
-    '<label class="field-label" for="discord-token">Token del bot</label><input class="text-input" id="discord-token" name="botToken" type="password" autocomplete="off" placeholder="' + (settings.hasBotToken ? 'Guardado. Dejar vacío para conservarlo' : 'Pegá el token del bot') + '" />' +
+    '<label class="field-label" for="discord-token">Token del bot</label><input class="text-input" id="discord-token" name="botToken" type="password" autocomplete="off" placeholder="' + (settings.hasBotToken ? 'Guardado. Dejar vacío para conservarlo' : 'Pega el token del bot') + '" />' +
     '<label class="discord-toggle"><input name="enabled" type="checkbox"' + (settings.enabled ? ' checked' : '') + ' /> Activar bot al iniciar MisGastos</label>' +
     '<p class="settings-note">El bot usa Claude Haiku 5.5 mediante Claude Code CLI en esta PC, con esfuerzo bajo. Consume el límite de uso de tu cuenta de Claude, sin clave API. El token de Discord se cifra en Windows y no se exporta.</p>' +
     '<div class="dialog-actions"><button class="button button-outline" type="button" data-action="close-modal">Cancelar</button><button class="button button-primary" type="submit">Guardar conexión</button></div></form></div>';
@@ -863,11 +899,11 @@ function discordModal() {
 
 function mergeConceptsModal() {
   const category = categoryById(modal.categoryId);
-  const groups = conceptGroups(modal.categoryId).sort(function (a, b) { return a.title.localeCompare(b.title, 'es-AR'); });
+  const groups = conceptGroups(modal.categoryId).sort(function (a, b) { return a.title.localeCompare(b.title, 'es-CL'); });
   const choices = groups.map(function (group) { return { value: group.key, label: group.title }; });
   return '<div class="modal-backdrop" data-action="close-modal"></div><div class="dialog merge-dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">' +
-    '<div class="dialog-head"><div><p class="eyebrow">' + escapeHtml(category ? category.name.toLocaleUpperCase('es-AR') : 'CATEGORÍA') + '</p><h2 id="dialog-title">Unir nombres</h2></div><button class="icon-button" data-action="close-modal" type="button" aria-label="Cerrar">' + icon('close', 20) + '</button></div>' +
-    '<p class="savings-form-note">Si escribiste el mismo comercio de distintas formas, unificá sus movimientos para verlo en un solo gráfico.</p>' +
+    '<div class="dialog-head"><div><p class="eyebrow">' + escapeHtml(category ? category.name.toLocaleUpperCase('es-CL') : 'CATEGORÍA') + '</p><h2 id="dialog-title">Unir nombres</h2></div><button class="icon-button" data-action="close-modal" type="button" aria-label="Cerrar">' + icon('close', 20) + '</button></div>' +
+    '<p class="savings-form-note">Si escribiste el mismo comercio de distintas formas, unifica sus movimientos para verlo en un solo gráfico.</p>' +
     '<form id="merge-concepts-form" novalidate>' +
       customSelect('merge-source', 'Nombre actual', 'source', groups[0] && groups[0].key, choices, 'form-dropdown') +
       customSelect('merge-target', 'Unir con', 'target', groups[1] && groups[1].key, choices, 'form-dropdown') +
@@ -881,7 +917,7 @@ function breakdownModal() {
   const breakdown = breakdownData(annual ? yearTransactions(annualYear) : selectedTransactions());
   const rows = breakdown.entries.map(function (entry) {
     const percent = breakdown.total ? entry.amount / breakdown.total * 100 : 0;
-    const value = percent < 1 ? '&lt;1%' : percent.toLocaleString('es-AR', { maximumFractionDigits: 1 }) + '%';
+    const value = percent < 1 ? '&lt;1%' : percent.toLocaleString('es-CL', { maximumFractionDigits: 1 }) + '%';
     const inner = '<span class="breakdown-detail-name"><span class="legend-dot ' + toneClass(entry.tone) + '"' + toneStyle(entry.tone) + '></span><strong>' + escapeHtml(entry.name) + '</strong></span><span class="breakdown-detail-value"><strong>' + money(entry.amount) + '</strong><small>' + value + '</small></span><span class="breakdown-detail-meta">' + entry.count + (entry.count === 1 ? ' movimiento' : ' movimientos') + '</span><span class="breakdown-detail-track"><span style="width:' + percent.toFixed(2) + '%;background:' + toneColor(entry.tone) + '"></span></span>';
     return annual
       ? '<div class="breakdown-detail-row">' + inner + '</div>'
@@ -891,7 +927,7 @@ function breakdownModal() {
     '<div class="dialog-head"><div><p class="eyebrow">' + (annual ? 'RESUMEN ANUAL' : 'RESUMEN MENSUAL') + '</p><h2 id="dialog-title">Gastos por categoría</h2><span class="breakdown-period">' + escapeHtml(label) + '</span></div><button class="icon-button" data-action="close-modal" type="button" aria-label="Cerrar">' + icon('close', 20) + '</button></div>' +
     '<div class="breakdown-dialog-chart">' + donutChart(breakdown.entries, breakdown.total, label, false, 'large') + '<p>' + breakdown.entries.length + (breakdown.entries.length === 1 ? ' categoría' : ' categorías') + ' · ' + breakdown.entries.reduce(function (sum, entry) { return sum + entry.count; }, 0) + ' gastos</p></div>' +
     '<div class="breakdown-detail-list">' + rows + '</div>' +
-    (annual ? '<p class="breakdown-detail-note">Elegí un mes para analizar una categoría y sus movimientos.</p>' : '<p class="breakdown-detail-note">Tocá una categoría para ver sus movimientos y comercios.</p>') + '</div>';
+    (annual ? '<p class="breakdown-detail-note">Elige un mes para analizar una categoría y sus movimientos.</p>' : '<p class="breakdown-detail-note">Toca una categoría para ver sus movimientos y comercios.</p>') + '</div>';
 }
 
 function renderModal() {
@@ -902,7 +938,7 @@ function renderModal() {
   if (modal.type === 'category') return categoryModal();
   if (modal.type === 'discord') return discordModal();
   if (modal.type === 'qr') return qrModal();
-  if (modal.type === 'balance') return '<div class="modal-backdrop" data-action="close-modal"></div><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title"><div class="dialog-head"><div><p class="eyebrow">TUS DATOS</p><h2 id="dialog-title">Saldo inicial</h2></div><button class="icon-button" data-action="close-modal" type="button" aria-label="Cerrar">' + icon('close', 20) + '</button></div><form id="balance-form"><p class="savings-form-note">El saldo actual suma tus movimientos a este importe.</p><label class="field-label" for="opening-balance">Saldo inicial en pesos</label><div class="amount-input"><span>$</span><input id="opening-balance" name="balance" type="number" inputmode="numeric" step="1" value="' + data.openingBalance + '" required /></div><div class="dialog-actions"><button class="button button-outline" type="button" data-action="close-modal">Cancelar</button><button class="button button-primary" type="submit">Guardar saldo</button></div></form></div>';
+  if (modal.type === 'balance') return '<div class="modal-backdrop" data-action="close-modal"></div><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title"><div class="dialog-head"><div><p class="eyebrow">TUS DATOS</p><h2 id="dialog-title">Saldo inicial</h2></div><button class="icon-button" data-action="close-modal" type="button" aria-label="Cerrar">' + icon('close', 20) + '</button></div><form id="balance-form"><p class="savings-form-note">El saldo actual suma tus movimientos a este importe.</p><label class="field-label" for="opening-balance">Saldo inicial en pesos</label><div class="amount-input"><span>$</span><input id="opening-balance" name="balance" type="text" inputmode="numeric" autocomplete="off" data-amount-input data-amount-negative value="' + formatAmountValue(data.openingBalance) + '" required /></div><div class="dialog-actions"><button class="button button-outline" type="button" data-action="close-modal">Cancelar</button><button class="button button-primary" type="submit">Guardar saldo</button></div></form></div>';
   if (modal.type === 'confirmation') return confirmationModal();
   return '';
 }
@@ -953,7 +989,7 @@ function openSavings(action, id) {
 }
 
 function updateSavingsCurrencyUi(form, currency) {
-  const foreign = currency !== 'ARS';
+  const foreign = currency !== 'CLP';
   const costField = form.querySelector('[data-foreign-cost]');
   costField.hidden = !foreign;
   costField.querySelector('input').required = foreign;
@@ -1240,7 +1276,7 @@ document.addEventListener('click', function (event) {
       const category = modal && categoryById(modal.id);
       if (!category) break;
       if (data.transactions.some(function (item) { return item.categoryId === category.id; })) {
-        toast('Primero reasigná sus movimientos a otra categoría');
+        toast('Primero reasigna sus movimientos a otra categoría');
       } else { modal = { type: 'confirmation', action: 'delete-category', id: category.id, returnTo: modal }; render(); }
       break;
     }
@@ -1260,7 +1296,7 @@ document.addEventListener('click', function (event) {
       } else if (modal.action === 'delete-transaction') {
         const remaining = data.transactions.filter(function (entry) { return entry.id !== modal.id; });
         if (!savingsBalancesValid(remaining)) {
-          modal = modal.returnTo; render(); toast('No podés eliminar este aporte mientras haya retiros que dependan de él'); break;
+          modal = modal.returnTo; render(); toast('No puedes eliminar este aporte mientras haya retiros que dependan de él'); break;
         }
         data.transactions = data.transactions.filter(function (entry) { return entry.id !== modal.id; });
         modal = null; saveData(); render(); toast('Movimiento eliminado');
@@ -1274,6 +1310,7 @@ document.addEventListener('click', function (event) {
 });
 
 document.addEventListener('input', function (event) {
+  if (event.target.matches('[data-amount-input]')) { reformatAmountInput(event.target); return; }
   if (event.target.id === 'title' && modal && modal.type === 'transaction') { updateDescriptionSuggestions(); return; }
   if (event.target.id === 'icon-search') {
     const needle = event.target.value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
@@ -1346,7 +1383,7 @@ document.addEventListener('submit', function (event) {
     const groups = conceptGroups(modal.categoryId);
     const destination = groups.find(function (group) { return group.key === target; });
     if (!source || source === target || !groups.some(function (group) { return group.key === source; }) || !destination) {
-      toast('Elegí dos nombres distintos'); return;
+      toast('Elige dos nombres distintos'); return;
     }
     data.transactions.forEach(function (item) {
       if (item.categoryId === modal.categoryId && conceptKey(item.title) === source) item.title = destination.title;
@@ -1355,32 +1392,32 @@ document.addEventListener('submit', function (event) {
     modal = null; saveData(); render(); toast('Nombres unidos');
   } else if (event.target.id === 'balance-form') {
     event.preventDefault();
-    const balance = Number(new FormData(event.target).get('balance'));
-    if (!Number.isSafeInteger(balance) || Math.abs(balance) > 1e12) { toast('Ingresá un saldo válido en pesos'); return; }
+    const balance = parseAmountText(new FormData(event.target).get('balance'));
+    if (!Number.isSafeInteger(balance) || Math.abs(balance) > 1e12) { toast('Ingresa un saldo válido en pesos'); return; }
     data.openingBalance = balance;
     modal = null; saveData(); render(); toast('Saldo inicial guardado');
   } else if (event.target.id === 'transaction-form') {
     event.preventDefault();
     const form = new FormData(event.target);
-    const amount = Number(form.get('amount'));
+    const amount = parseAmountText(form.get('amount'));
     const title = String(form.get('title') || '').trim();
     const note = String(form.get('note') || '').trim();
     const date = String(form.get('date') || '');
     const categoryId = String(form.get('category') || '');
     if (!Number.isSafeInteger(amount) || amount <= 0 || !title || title.length > 80 || note.length > 160 || !/^\d{4}-\d{2}-\d{2}$/.test(date) || categoryById(categoryId)?.kind !== modal.kind) {
-      toast('Revisá el monto, la descripción y la categoría'); return;
+      toast('Revisa el monto, la descripción y la categoría'); return;
     }
     const previous = modal.id ? data.transactions.find(function (item) { return item.id === modal.id; }) : null;
     const entry = { id: modal.id || 't' + Date.now(), kind: modal.kind, amount: amount, title: title, date: date, categoryId: categoryId };
     if (previous?.createdAt || !previous) entry.createdAt = previous?.createdAt || new Date().toISOString();
     if (note) entry.note = note;
     if (isSavingsEntry(entry)) {
-      entry.savingsCurrency = previous && isSavingsEntry(previous) ? savingsCurrency(previous) : 'ARS';
+      entry.savingsCurrency = previous && isSavingsEntry(previous) ? savingsCurrency(previous) : 'CLP';
       entry.savingsAmount = previous && isSavingsEntry(previous) ? savingsUnits(previous) : amount;
     }
     const remaining = data.transactions.filter(function (item) { return item.id !== entry.id; });
     if (!savingsBalancesValid(remaining.concat(entry))) {
-      toast('El retiro no puede superar lo que tenés ahorrado'); return;
+      toast('El retiro no puede superar lo que tienes ahorrado'); return;
     }
     if (modal.id) data.transactions = data.transactions.map(function (item) { return item.id === modal.id ? entry : item; });
     else data.transactions.push(entry);
@@ -1389,16 +1426,16 @@ document.addEventListener('submit', function (event) {
   } else if (event.target.id === 'savings-form') {
     event.preventDefault();
     const form = new FormData(event.target);
-    const currency = String(form.get('currency') || 'ARS');
-    const units = Number(form.get('units'));
-    const amount = currency === 'ARS' ? units : Number(form.get('arsAmount'));
+    const currency = String(form.get('currency') || 'CLP');
+    const units = parseAmountText(form.get('units'));
+    const amount = currency === 'CLP' ? units : parseAmountText(form.get('arsAmount'));
     const title = String(form.get('title') || '').trim();
     const date = String(form.get('date') || '');
     const previous = modal.id ? data.transactions.find(function (entry) { return entry.id === modal.id; }) : null;
     const deposit = modal.action === 'deposit';
     const allowedCurrency = SAVINGS_CURRENCIES.some(function (entry) { return entry.code === currency; }) || currency === 'EUR' && (previous && savingsCurrency(previous) === 'EUR' || !deposit && savingsBalances().EUR > 0);
     if (!allowedCurrency || !Number.isFinite(units) || units <= 0 || !Number.isSafeInteger(Math.round(units * 100)) || Math.abs(units * 100 - Math.round(units * 100)) > 0.00001 || !Number.isSafeInteger(amount) || amount <= 0 || !title || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      toast('Revisá la moneda, los montos y la descripción'); return;
+      toast('Revisa la moneda, los montos y la descripción'); return;
     }
     const entry = { id: modal.id || 't' + Date.now(), kind: deposit ? 'expense' : 'income', amount: amount, title: title, date: date, categoryId: deposit ? 'savings' : 'savings-return', savingsCurrency: currency, savingsAmount: units };
     if (previous?.createdAt || !previous) entry.createdAt = previous?.createdAt || new Date().toISOString();
@@ -1415,13 +1452,13 @@ document.addEventListener('submit', function (event) {
     event.preventDefault();
     const form = new FormData(event.target);
     const name = String(form.get('name') || '').trim();
-    if (!name) { toast('Escribí un nombre para la categoría'); return; }
+    if (!name) { toast('Escribe un nombre para la categoría'); return; }
     const selectedIcon = String(form.get('icon'));
     const selectedTone = String(form.get('tone'));
     const customColor = '#' + String(form.get('customTone') || '').trim().replace(/^#/, '').toUpperCase();
     const tone = selectedTone === 'custom' ? customColor : selectedTone;
     if (!CATEGORY_ICON_CATALOG[selectedIcon] || !(PRESET_TONES.includes(tone) || isCustomTone(tone))) {
-      toast('Elegí un ícono y un color válido'); return;
+      toast('Elige un ícono y un color válido'); return;
     }
     const entry = { id: modal.id || 'c' + Date.now(), kind: modal.id ? categoryById(modal.id).kind : categoryKind, name: name, icon: selectedIcon, tone: tone };
     if (modal.id) data.categories = data.categories.map(function (category) { return category.id === modal.id ? entry : category; });
@@ -1430,7 +1467,7 @@ document.addEventListener('submit', function (event) {
   } else if (event.target.id === 'pair-form') {
     event.preventDefault();
     const code = String(new FormData(event.target).get('code') || '').replace(/\s/g, '').toUpperCase();
-    if (code !== QR_CODE) { toast('Usá el código de muestra A7F3K9M2'); return; }
+    if (code !== QR_CODE) { toast('Usa el código de muestra A7F3K9M2'); return; }
     pairingStep = 'pending';
     render();
   }

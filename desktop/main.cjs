@@ -126,7 +126,7 @@ if (singleInstance) app.whenReady().then(async () => {
   } catch (error) {
     shutdownReason = 'startup_error';
     console.error('No se pudo iniciar MisGastos:', error);
-    dialog.showErrorBox('MisGastos no pudo iniciarse', error.message + '\n\nSi el puerto 4174 está ocupado, cerrá la otra instancia.');
+    dialog.showErrorBox('MisGastos no pudo iniciarse', error.message + '\n\nSi el puerto 4174 está ocupado, cierra la otra instancia.');
     app.quit();
   }
 });

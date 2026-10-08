@@ -8,7 +8,7 @@ const MODEL = 'claude-haiku-5-5';
 const CLAUDE_TIMEOUT_MS = 180000;
 
 function keyOf(value) {
-  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es-AR').replace(/[^a-z0-9]+/g, ' ').trim();
+  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es-CL').replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
 function validDate(value) {
@@ -55,10 +55,10 @@ async function runClaude(schema, prompt, images = []) {
       const timeout = setTimeout(() => { timedOut = true; child.kill(); }, CLAUDE_TIMEOUT_MS);
       child.stdout.on('data', (chunk) => { output += chunk.toString(); if (output.length > 2_000_000) child.kill(); });
       child.stderr.on('data', (chunk) => { errorOutput = (errorOutput + chunk.toString()).slice(-4000); });
-      child.on('error', () => finish(new Error('No encuentro Claude Code CLI en esta PC. Instalalo e iniciá sesión con tu cuenta de Claude.')));
+      child.on('error', () => finish(new Error('No encuentro Claude Code CLI en esta PC. Instálalo e inicia sesión con tu cuenta de Claude.')));
       child.on('close', (code) => {
-        if (timedOut) return finish(new Error('Claude Code tardó demasiado. Probá de nuevo.'));
-        if (code !== 0) return finish(new Error(/not logged in|authentication|unauthorized|login required/i.test(errorOutput) ? 'Iniciá sesión en Claude Code CLI.' : 'Claude Code no pudo analizar el mensaje. Revisá la conexión o tu límite de uso.'));
+        if (timedOut) return finish(new Error('Claude Code tardó demasiado. Prueba de nuevo.'));
+        if (code !== 0) return finish(new Error(/not logged in|authentication|unauthorized|login required/i.test(errorOutput) ? 'Inicia sesión en Claude Code CLI.' : 'Claude Code no pudo analizar el mensaje. Revisa la conexión o tu límite de uso.'));
         try {
           const result = output.trim().split(/\r?\n/).map((line) => JSON.parse(line)).findLast((entry) => entry.type === 'result');
           if (!result || result.is_error || !result.structured_output) throw new Error('Claude Code no devolvió una respuesta utilizable');
@@ -77,7 +77,7 @@ const rowSchema = {
   type: 'object', additionalProperties: false,
   properties: {
     title: { type: 'string' }, kind: { type: 'string', enum: ['expense', 'income'] },
-    amount: { type: 'number' }, currency: { type: 'string', enum: ['ARS', 'USD', 'UNKNOWN'] },
+    amount: { type: 'number' }, currency: { type: 'string', enum: ['CLP', 'USD', 'UNKNOWN'] },
     date: { type: 'string' }, time: { type: ['string', 'null'] },
     categoryId: { type: ['string', 'null'] }, include: { type: 'boolean' },
     reason: { type: ['string', 'null'] }
@@ -93,19 +93,19 @@ const extractionSchema = {
 async function extractBatch({ images, caption, categories, rules, existing, today, referenceRows = [], runStructured = runClaude }) {
   const categoryList = categories.map((item) => ({ id: item.id, name: item.name, kind: item.kind }));
   const instructions = [
-    'Extraé movimientos financieros de las imágenes o del mensaje. Respondé solo según el esquema JSON.',
+    'Extrae movimientos financieros de las imágenes o del mensaje. Responde solo según el esquema JSON.',
     'Cada fila visible es un movimiento distinto. No inventes filas cortadas ni importes ilegibles.',
     'amount siempre es positivo. El signo menos de la captura indica kind=expense y el signo más indica kind=income.',
-    'Los importes usan formato argentino: 1.197,05 significa 1197.05. Usá fecha visible, no la fecha actual cuando la imagen indique otra.',
-    'Elegí solamente categoryId de la lista. Si no hay una opción clara, usá null e include=false.',
-    'Si el mensaje pide ignorar un comercio o fila, devolvela con include=false y reason="Ignorado por indicación del usuario".',
-    'En capturas, excluí cargos de tarjeta, cuotas que se pagarán como un único gasto, cargos USD y transferencias entre cuentas propias.',
-    'Si el usuario escribe expresamente un pago único de tarjeta o cuotas como gasto nuevo, proponelo en ARS con la categoría de Crédito si existe. No lo excluyas solo por ser de tarjeta.',
-    'Si el usuario se refiere a una fila anterior sin repetir el importe, usá las filas de referencia solo cuando el comercio coincida claramente. Priorizá el nombre sobre un número de fila ambiguo. Conservá importe y fecha originales. Si no podés identificarla, devolvé rows=[].',
-    'Si el mensaje pide descontar, dividir o corregir un movimiento YA GUARDADO, devolvé rows=[]; esta extracción no puede modificarlo y no debe proponer una parte nueva aislada.',
+    'Los importes usan formato chileno: el punto separa miles y la coma separa decimales (1.197 significa 1197; 1.197,50 significa 1197.5). Usa fecha visible, no la fecha actual cuando la imagen indique otra.',
+    'Elige solamente categoryId de la lista. Si no hay una opción clara, usa null e include=false.',
+    'Si el mensaje pide ignorar un comercio o fila, devuélvela con include=false y reason="Ignorado por indicación del usuario".',
+    'En capturas, excluye cargos de tarjeta, cuotas que se pagarán como un único gasto, cargos USD y transferencias entre cuentas propias.',
+    'Si el usuario escribe expresamente un pago único de tarjeta o cuotas como gasto nuevo, proponlo en CLP con la categoría de Crédito si existe. No lo excluyas solo por ser de tarjeta.',
+    'Si el usuario se refiere a una fila anterior sin repetir el importe, usa las filas de referencia solo cuando el comercio coincida claramente. Prioriza el nombre sobre un número de fila ambiguo. Conserva importe y fecha originales. Si no puedes identificarla, devuelve rows=[].',
+    'Si el mensaje pide descontar, dividir o corregir un movimiento YA GUARDADO, devuelve rows=[]; esta extracción no puede modificarlo y no debe proponer una parte nueva aislada.',
     'Un ingreso de origen incierto o una transferencia a una persona sin regla conocida: include=false hasta que el usuario aclare.',
-    'No conviertas USD a ARS. Para ARS, conservá el valor con decimales; la app redondeará al peso al guardar.',
-    'Máximo 30 filas. Usá nombres cortos y reconocibles como título.',
+    'No conviertas USD a CLP. Para CLP, conserva el valor tal como aparece; la app redondeará al peso al guardar.',
+    'Máximo 30 filas. Usa nombres cortos y reconocibles como título.',
     'Fecha actual: ' + today,
     'Categorías: ' + JSON.stringify(categoryList),
     'Reglas conocidas: ' + JSON.stringify(rules),
@@ -133,9 +133,9 @@ async function extractBatch({ images, caption, categories, rules, existing, toda
     let include = ruleCategory && !/ignorad|omitid|tarjeta/i.test(reason) ? true : item.include === true;
     if (!dateKnown) { include = false; reason = 'Fecha por confirmar'; }
     if (!title || !Number.isSafeInteger(amount) || amount <= 0) { include = false; reason = 'Importe o concepto ilegible'; }
-    if (currency !== 'ARS') { include = false; reason = currency === 'USD' ? 'Gasto en USD para cargar con la tarjeta' : 'Moneda incierta'; }
+    if (currency !== 'CLP') { include = false; reason = currency === 'USD' ? 'Gasto en USD para cargar con la tarjeta' : 'Moneda incierta'; }
     if (images.length && /tarjeta de cr[eé]dito|cr[eé]ditos? de mercado pago|pago de cuotas|cuotas? mercado pago/i.test(title + ' ' + reason)) { include = false; reason = 'Tarjeta o cuota para cargar por separado'; }
-    if (!images.length && item.kind === 'expense' && dateKnown && Number.isSafeInteger(amount) && amount > 0 && currency === 'ARS' && category?.kind === 'expense' && /tarjeta|cuot|cr[eé]dit/i.test(title) && !/(?:ignora|omit[ií])/i.test(caption || '')) { include = true; reason = ''; }
+    if (!images.length && item.kind === 'expense' && dateKnown && Number.isSafeInteger(amount) && amount > 0 && currency === 'CLP' && category?.kind === 'expense' && /tarjeta|cuot|cr[eé]dit/i.test(title) && !/(?:ignora|omit[eií])/i.test(caption || '')) { include = true; reason = ''; }
     if (ignoreKey && (keyOf(title).includes(ignoreKey) || ignoreKey.includes(keyOf(title)))) { include = false; reason = 'Ignorado por indicación tuya'; }
     if (!category || category.kind !== item.kind || categoryId === 'savings' || categoryId === 'savings-return') { include = false; reason ||= 'Categoría por confirmar'; }
     const fingerprint = [keyOf(title), item.kind, date, amount, time || ''].join('|');
@@ -177,22 +177,22 @@ const correctionSchema = {
 
 async function interpretCorrections({ message, batch, categories, history = [], runStructured = runClaude }) {
   const prompt = [
-    'Sos el intérprete de instrucciones del dueño de MisGastos. Interpretá TODAS las acciones del mensaje actual sobre la propuesta pendiente, usando los mensajes recientes para resolver referencias como "ese", "el de arriba", "lo que te dije" o "dividilo". El mensaje actual tiene prioridad. No inventes una referencia si hay varias filas posibles: hacé una pregunta concreta en clarification y devolvé edits=[].',
-    'Devolvé una edición por cada fila mencionada, incluso si el usuario escribe varias instrucciones breves como "1 ropa 2 verdulería 3 ingreso extra ponele Trabajo Pintura". No te quedes solo con la primera.',
+    'Eres el intérprete de instrucciones del dueño de MisGastos. Interpreta TODAS las acciones del mensaje actual sobre la propuesta pendiente, usando los mensajes recientes para resolver referencias como "ese", "el de arriba", "lo que te dije" o "divídelo". El mensaje actual tiene prioridad. No inventes una referencia si hay varias filas posibles: haz una pregunta concreta en clarification y devuelve edits=[].',
+    'Devuelve una edición por cada fila mencionada, incluso si el usuario escribe varias instrucciones breves como "1 ropa 2 verdulería 3 ingreso extra ponle Trabajo Pintura". No te quedes solo con la primera.',
     'Cada edición usa los campos indicados. Para campos no aplicables: null, false o parts=[]. index es el número de fila (1 en adelante), o 0 para create_category y remember.',
     'action=update puede cambiar categoría y título juntos. categoryId=null y categoryName=null conservan la categoría; title=null conserva el título.',
-    'Si dice "ponerle de nombre", "que sea" o "llamalo", poné el nuevo título exacto en title. No mantengas el nombre de la persona cuando pide reemplazarlo por un concepto.',
-    'Si nombra una categoría existente, elegí su categoryId y dejá title=null salvo que pida cambiar el nombre. "1 ropa" solo cambia categoría a Ropa.',
-    'Si usa un concepto que no es categoría existente, como "verdulería" o "costurera", elegí una categoría existente apropiada para el tipo de fila y usá ese concepto como título. Verdulería va en Comida; costurera va en Ropa si existen.',
-    '"Ingreso extra" corresponde a una categoría de ingreso como Otros ingresos, nunca a una categoría de gasto llamada Extras. Si agrega "ponele Trabajo Pintura", title="Trabajo Pintura".',
+    'Si dice "ponerle de nombre", "que sea" o "llámalo", pon el nuevo título exacto en title. No mantengas el nombre de la persona cuando pide reemplazarlo por un concepto.',
+    'Si nombra una categoría existente, elige su categoryId y deja title=null salvo que pida cambiar el nombre. "1 ropa" solo cambia categoría a Ropa.',
+    'Si usa un concepto que no es categoría existente, como "verdulería" o "costurera", elige una categoría existente apropiada para el tipo de fila y usa ese concepto como título. Verdulería va en Comida; costurera va en Ropa si existen.',
+    '"Ingreso extra" corresponde a una categoría de ingreso como Otros ingresos, nunca a una categoría de gasto llamada Extras. Si agrega "ponle Trabajo Pintura", title="Trabajo Pintura".',
     'Si pide expresamente crear una categoría, action=create_category, index=0, categoryName con el nombre exacto, kind=expense o income, icon de la lista y tone entre lavender, coral, mint, sky, rose, peach. No crees categorías por inferencia cuando solo pide usar una categoría.',
-    'Si crea una categoría y también pide usarla en una fila, agregá otra edición update o split con categoryName igual al nombre nuevo. Para una categoría existente usá categoryId.',
-    'Si pide dividir una fila, action=split con 2 a 10 parts. Cada parte tiene amount en pesos enteros, categoryId o categoryName, y title opcional. Calculá los importes para que sumen exactamente el importe original. Si una parte es "el resto", usá amount=null solo en esa parte. Si no se puede determinar el reparto, preguntá en clarification y no hagas cambios.',
+    'Si crea una categoría y también pide usarla en una fila, agrega otra edición update o split con categoryName igual al nombre nuevo. Para una categoría existente usa categoryId.',
+    'Si pide dividir una fila, action=split con 2 a 10 parts. Cada parte tiene amount en pesos enteros, categoryId o categoryName, y title opcional. Calcula los importes para que sumen exactamente el importe original. Si una parte es "el resto", usa amount=null solo en esa parte. Si no se puede determinar el reparto, pregunta en clarification y no hagas cambios.',
     'No dividas un gasto si no hay una fila pendiente identificable. Todas las ediciones de fila se refieren a la numeración original del lote.',
     'Si pide ignorar una fila, action=ignore. Si pide incluir una fila sin cambiarla, action=include.',
     'Una regla se puede recordar sin filas pendientes: action=remember, index=0, merchant con el nombre exacto del comercio o destinatario y categoryId de una categoría de gasto.',
     'Para cambios de filas, merchant=null normalmente; remember=true solo si pide expresamente recordar para el futuro. No inventes filas ni categorías.',
-    'Si hay una petición entendible, no respondas con edits=[] por tener lenguaje coloquial. Si de verdad falta una referencia o un importe necesario, usá clarification con una pregunta breve. Cuando no haya acción ni ambigüedad, devolvé edits=[] y clarification=null.',
+    'Si hay una petición entendible, no respondas con edits=[] por tener lenguaje coloquial. Si de verdad falta una referencia o un importe necesario, usa clarification con una pregunta breve. Cuando no haya acción ni ambigüedad, devuelve edits=[] y clarification=null.',
     'Íconos disponibles: ' + JSON.stringify(Object.entries(categoryIcons).map(([id, item]) => ({ id, label: item.label }))),
     'Categorías: ' + JSON.stringify(categories.map((item) => ({ id: item.id, name: item.name, kind: item.kind }))),
     'Filas: ' + JSON.stringify(batch.rows.map((row, index) => ({ index: index + 1, title: row.title, kind: row.kind, amount: row.amount, currency: row.currency, categoryId: row.categoryId, include: row.include, reason: row.reason }))),
@@ -218,11 +218,11 @@ async function interpretSavedAdjustment({ message, transactions, categories, tod
   const names = new Map(categories.map((item) => [item.id, item.name]));
   const prompt = [
     'El dueño quiere corregir un gasto YA GUARDADO, no registrar un gasto adicional por el total mencionado.',
-    'Elegí una sola transacción existente por su importe, fecha, nombre o categoría. "Ayer" es el día anterior a la fecha actual. Si hay varias posibles, no elijas: preguntá en clarification.',
+    'Elige una sola transacción existente por su importe, fecha, nombre o categoría. "Ayer" es el día anterior a la fecha actual. Si hay varias posibles, no elijas: pregunta en clarification.',
     'portionAmount es el monto que se descuenta de la transacción original para crear una segunda parte. Debe ser positivo y menor que el importe original.',
     'categoryId es la categoría de la parte nueva. title es el título de la parte nueva. Si dice "en Mascota Comida", Mascotas es la categoría y Comida es el título.',
     'No cambies la categoría ni el título del movimiento original. La app restará portionAmount y propondrá la parte nueva por separado. No guardará nada hasta que el dueño confirme.',
-    'Si la instrucción no especifica con claridad movimiento original, importe a descontar, categoría o título nuevo, devolvé sourceId=null y una pregunta concreta en clarification.',
+    'Si la instrucción no especifica con claridad movimiento original, importe a descontar, categoría o título nuevo, devuelve sourceId=null y una pregunta concreta en clarification.',
     'Fecha actual: ' + today,
     'Categorías: ' + JSON.stringify(categories.map((item) => ({ id: item.id, name: item.name, kind: item.kind }))),
     'Movimientos guardados: ' + JSON.stringify(transactions.slice(-80).map((item) => ({ id: item.id, title: item.title, amount: item.amount, date: item.date, category: names.get(item.categoryId), kind: item.kind }))),

@@ -41,16 +41,16 @@ function pairPage(token, expires) {
   const safeToken = JSON.stringify(token).replace(/</g, '\\u003c');
   return `<!doctype html><html lang="es"><head><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta charset="utf-8"><title>Vincular MisGastos</title><style>
   :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#242633;background:#f6f4f0}*{box-sizing:border-box}body{margin:0;min-height:100dvh;display:grid;place-items:center;padding:24px}.card{width:min(100%,420px);padding:28px;border:1px solid #e5e1de;border-radius:22px;background:#fdfbf7;box-shadow:0 18px 60px #29213912}.logo{width:46px;height:46px;object-fit:contain}h1{font-size:26px;margin:22px 0 10px;letter-spacing:-.04em}p{color:#666a7a;line-height:1.5}.status{margin-top:24px;padding:16px;border-radius:13px;background:#eeeafa;color:#6659a8;font-weight:700}.small{font-size:13px}button{background:#7e6dca;color:white;border:0;border-radius:10px;padding:13px 16px;font-weight:700;cursor:pointer;margin-top:12px;width:100%}
-  </style></head><body><main class="card"><img class="logo" src="/assets/misgastos-logo.png" alt=""><h1>Vincular con MisGastos</h1><p>Enviamos una solicitud a tu PC. Aprobala allí para usar tus gastos desde este iPhone.</p><div class="status" id="status">Conectando con la PC...</div><p class="small">El código vence en unos minutos. La PC debe estar encendida y MisGastos abierto en segundo plano.</p><button id="retry" hidden>Volver a intentar</button></main><script>
+  </style></head><body><main class="card"><img class="logo" src="/assets/misgastos-logo.png" alt=""><h1>Vincular con MisGastos</h1><p>Enviamos una solicitud a tu PC. Apruébala allí para usar tus gastos desde este iPhone.</p><div class="status" id="status">Conectando con la PC...</div><p class="small">El código vence en unos minutos. La PC debe estar encendida y MisGastos abierto en segundo plano.</p><button id="retry" hidden>Volver a intentar</button></main><script>
   const token=${safeToken}; const expiry=${Number(expires)}; const statusNode=document.getElementById('status'); let requestId=null;
   async function requestPair(){try{if(Date.now()>expiry)throw new Error('El QR venció. Generá uno nuevo en la PC.');const response=await fetch('/api/pair/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,name:/iPhone/i.test(navigator.userAgent)?'iPhone':'Celular'})});const result=await response.json();if(!response.ok)throw new Error(result.error||'No se pudo conectar');requestId=result.requestId;statusNode.textContent='Esperando aprobación en la PC...';poll();}catch(error){statusNode.textContent=error.message;document.getElementById('retry').hidden=false}}
-  async function poll(){if(!requestId)return;try{const response=await fetch('/api/pair/status?requestId='+encodeURIComponent(requestId),{cache:'no-store'});const result=await response.json();if(result.status==='approved'){statusNode.textContent='¡Conectado! Abriendo tus gastos...';location.replace('/');return}if(result.status==='denied'||result.status==='expired'){statusNode.textContent=result.status==='denied'?'La PC rechazó la solicitud.':'La solicitud venció. Generá un nuevo QR.';return}}catch(error){statusNode.textContent='Esperando conexión con la PC...'}setTimeout(poll,2000)}
+  async function poll(){if(!requestId)return;try{const response=await fetch('/api/pair/status?requestId='+encodeURIComponent(requestId),{cache:'no-store'});const result=await response.json();if(result.status==='approved'){statusNode.textContent='¡Conectado! Abriendo tus gastos...';location.replace('/');return}if(result.status==='denied'||result.status==='expired'){statusNode.textContent=result.status==='denied'?'La PC rechazó la solicitud.':'La solicitud venció. Genera un nuevo QR.';return}}catch(error){statusNode.textContent='Esperando conexión con la PC...'}setTimeout(poll,2000)}
   document.getElementById('retry').onclick=()=>{document.getElementById('retry').hidden=true;requestPair()};requestPair();
   </script></body></html>`;
 }
 
 function unauthorizedPage() {
-  return '<!doctype html><html lang="es"><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8"><title>MisGastos</title><body style="font-family:system-ui;background:#f6f4f0;color:#242633;padding:32px"><h1>Vinculá este celular</h1><p>En la PC abrí MisGastos, tocá Conectar iPhone y escaneá el QR nuevo.</p></body></html>';
+  return '<!doctype html><html lang="es"><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8"><title>MisGastos</title><body style="font-family:system-ui;background:#f6f4f0;color:#242633;padding:32px"><h1>Vincula este celular</h1><p>En la PC abre MisGastos, toca Conectar iPhone y escanea el QR nuevo.</p></body></html>';
 }
 
 async function readBody(req) {
@@ -86,13 +86,13 @@ function startServer(store, root, onPending, discordBot, discordConfig) {
       if (pathname === '/pair' && req.method === 'GET') {
         if (device) return res.writeHead(302, { Location: '/' }).end();
         const token = url.searchParams.get('token') || '';
-        if (!pairToken || Date.now() > pairExpires || token !== pairToken) return html(res, 410, '<h1>El QR venció</h1><p>Generá uno nuevo en la PC.</p>');
+        if (!pairToken || Date.now() > pairExpires || token !== pairToken) return html(res, 410, '<h1>El QR venció</h1><p>Genera uno nuevo en la PC.</p>');
         return html(res, 200, pairPage(token, pairExpires));
       }
 
       if (pathname === '/api/pair/request' && req.method === 'POST') {
         const body = await readBody(req);
-        if (!pairToken || Date.now() > pairExpires || body.token !== pairToken) return json(res, 410, { error: 'El QR venció. Generá otro en la PC.' });
+        if (!pairToken || Date.now() > pairExpires || body.token !== pairToken) return json(res, 410, { error: 'El QR venció. Genera otro en la PC.' });
         const requestId = crypto.randomBytes(24).toString('base64url');
         pending.set(requestId, { name: String(body.name || 'Celular').slice(0, 80), createdAt: Date.now(), status: 'pending' });
         onPending();
@@ -111,7 +111,7 @@ function startServer(store, root, onPending, discordBot, discordConfig) {
         return json(res, 200, { status: item.status });
       }
 
-      if (pathname.startsWith('/api/') && !authorized) return json(res, 401, { error: 'Vinculá este dispositivo desde la PC' });
+      if (pathname.startsWith('/api/') && !authorized) return json(res, 401, { error: 'Vincula este dispositivo desde la PC' });
       if (pathname === '/api/state' && req.method === 'GET') return json(res, 200, store.getState());
       if (pathname === '/api/state' && req.method === 'POST') {
         const body = await readBody(req);

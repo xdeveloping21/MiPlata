@@ -33,7 +33,7 @@ function createDiscordConfig(userDataPath, safeStorage) {
     if (!input || typeof input !== 'object') throw new Error('Configuración inválida');
     const channelId = String(input.channelId || '').trim();
     if (channelId && !/^\d{17,22}$/.test(channelId)) throw new Error('El ID del canal no es válido');
-    if (typeof input.enabled !== 'boolean') throw new Error('Elegí si querés activar el bot');
+    if (typeof input.enabled !== 'boolean') throw new Error('Elige si quieres activar el bot');
     const botToken = String(input.botToken || '').trim();
     if (botToken.length > 300) throw new Error('Token demasiado largo');
     if (input.enabled && (!channelId || !(botToken || secret('botToken')))) {

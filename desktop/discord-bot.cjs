@@ -3,28 +3,28 @@ const { extractBatch, interpretCorrections, interpretSavedAdjustment } = require
 const { applyCorrections } = require('./discord-corrections.cjs');
 const { isSavedAdjustmentRequest, buildSavedAdjustment } = require('./discord-saved-adjustment.cjs');
 
-function formatAmount(amount) { return '$' + Number(amount).toLocaleString('es-AR'); }
+function formatAmount(amount) { return '$' + Number(amount).toLocaleString('es-CL'); }
 
-function todayInArgentina() {
-  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+function todayInChile() {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
   const part = (type) => parts.find((item) => item.type === type).value;
   return part('year') + '-' + part('month') + '-' + part('day');
 }
 
 function isNewMovementMessage(input) {
-  if (isCategoryRequest(input) || /(?:^|\W)(?:divid[ií]|dividir|repart[ií]|repartir|separ[aá]|separar)(?:\W|$)/i.test(input)) return false;
-  if (/^(?:ignora|ignor[aá]|omit[ií]|inclu[ií]|fila\s*\d+|(?:el|la)\s+\d+\s+(?:va|es|pon|cambi))/i.test(input)) return false;
-  if (/\b(?:pon[eé]|cambi[aá]|correg[ií]|va en)\b/i.test(input)) return false;
-  return /(?:\$|\bARS\b|\bUSD\b)\s*\d|\b\d{2,}(?:[.,]\d+)*\b/i.test(input) || /^(?:nuevo\s+(?:gasto|ingreso|movimiento)|(?:tambi[eé]n\s+)?(?:cre[aá]|agreg[aá]|registr[aá]|carg[aá])\b)/i.test(input);
+  if (isCategoryRequest(input) || /(?:^|\W)(?:divid[eií]|dividir|repart[eií]|repartir|separ[aá]|separar)(?:\W|$)/i.test(input)) return false;
+  if (/^(?:ignora|ignor[aá]|omit[eií]|inclu[ií]|incluye|fila\s*\d+|(?:el|la)\s+\d+\s+(?:va|es|pon|cambi))/i.test(input)) return false;
+  if (/\b(?:pon[eé]?|cambi[aá]|correg[ií]|corrige|va en)\b/i.test(input)) return false;
+  return /(?:\$|\bCLP\b|\bUSD\b)\s*\d|\b\d{2,}(?:[.,]\d+)*\b/i.test(input) || /^(?:nuevo\s+(?:gasto|ingreso|movimiento)|(?:tambi[eé]n\s+)?(?:cre[aá]|agreg[aá]|registr[aá]|carg[aá])\b)/i.test(input);
 }
 
 function isCategoryRequest(input) {
-  return /(?:^|\W)(?:cre[aá]|cre[aá]me|crear|hac[eé]|agreg[aá]|agregar|nueva?)(?:\W|$).{0,45}\bcategor[ií]a\b|\bcategor[ií]a\b.{0,45}(?:^|\W)(?:cre[aá]|cre[aá]me|crear|hac[eé]|agreg[aá]|agregar|nueva?)(?:\W|$)/i.test(input);
+  return /(?:^|\W)(?:cre[aá]|cre[aá]me|crear|hac[eé]|haz|hazme|agreg[aá]|agregar|nueva?)(?:\W|$).{0,45}\bcategor[ií]a\b|\bcategor[ií]a\b.{0,45}(?:^|\W)(?:cre[aá]|cre[aá]me|crear|hac[eé]|haz|hazme|agreg[aá]|agregar|nueva?)(?:\W|$)/i.test(input);
 }
 
 function isCorrectionMessage(input, pending) {
   if (!pending?.rows.length) return false;
-  if (isCategoryRequest(input) || /(?:^|\W)(?:divid[ií]|dividir|repart[ií]|repartir|separ[aá]|separar)(?:\W|$)/i.test(input)) return true;
+  if (isCategoryRequest(input) || /(?:^|\W)(?:divid[eií]|dividir|repart[eií]|repartir|separ[aá]|separar)(?:\W|$)/i.test(input)) return true;
   if (/^\s*(?:(?:fila|el|la)\s+)?\d{1,2}\s+[a-záéíóú]/i.test(input)) return true;
   return !isNewMovementMessage(input);
 }
@@ -40,8 +40,8 @@ function preview(batch, categories) {
   });
   const ready = batch.rows.filter((row) => row.include).length;
   const savedAdjustment = batch.rows.some((row) => row.adjustmentGroup);
-  return ['**Propuesta de MisGastos**', ...(lines.length ? lines : ['No encontré movimientos legibles. Probá otra captura o escribilos en un mensaje.']), '',
-    ready ? savedAdjustment ? 'Escribí **guardar** para actualizar el gasto existente y agregar la parte nueva. También podés escribir **cancelar**.' : `Escribí **guardar** para cargar ${ready} movimiento${ready === 1 ? '' : 's'}. Podés corregir varias filas juntas: "1 Ropa y nombre Costurera, 2 Comida, ignorá 3".` : 'No hay movimientos listos para guardar. Podés corregir una o varias filas, o cancelar.'].join('\n').slice(0, 1900);
+  return ['**Propuesta de MisGastos**', ...(lines.length ? lines : ['No encontré movimientos legibles. Prueba otra captura o escríbelos en un mensaje.']), '',
+    ready ? savedAdjustment ? 'Escribe **guardar** para actualizar el gasto existente y agregar la parte nueva. También puedes escribir **cancelar**.' : `Escribe **guardar** para cargar ${ready} movimiento${ready === 1 ? '' : 's'}. Puedes corregir varias filas juntas: "1 Ropa y nombre Costurera, 2 Comida, ignora 3".` : 'No hay movimientos listos para guardar. Puedes corregir una o varias filas, o cancelar.'].join('\n').slice(0, 1900);
 }
 
 async function downloadImage(attachment) {
@@ -51,7 +51,7 @@ async function downloadImage(attachment) {
   const response = await fetch(url, { signal: AbortSignal.timeout(20000), redirect: 'error' });
   if (!response.ok) throw new Error('No se pudo descargar la captura');
   const mime = String(response.headers.get('content-type') || '').split(';')[0].toLowerCase();
-  if (!['image/png', 'image/jpeg', 'image/webp'].includes(mime)) throw new Error('Mandá una imagen PNG, JPG o WebP');
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(mime)) throw new Error('Manda una imagen PNG, JPG o WebP');
   const chunks = [];
   let size = 0;
   for await (const chunk of response.body) {
@@ -89,7 +89,7 @@ function createDiscordBot(store, config, onStatus = () => {}) {
     const categories = state.data.categories;
     const interpretation = await interpretCorrections({ message: input, batch: pending || { rows: [] }, categories, history: await recentHistory(message) });
     if (interpretation.clarification || !interpretation.edits.length) {
-      await message.reply({ content: interpretation.clarification || 'No entendí qué cambiar. Decime la fila, el nombre de la categoría o cómo dividir el importe.', allowedMentions: { parse: [] } });
+      await message.reply({ content: interpretation.clarification || 'No entendí qué cambiar. Dime la fila, el nombre de la categoría o cómo dividir el importe.', allowedMentions: { parse: [] } });
       return;
     }
     const result = applyCorrections({ message: input, rows: pending?.rows || [], categories, edits: interpretation.edits });
@@ -104,9 +104,9 @@ function createDiscordBot(store, config, onStatus = () => {}) {
 
   async function handleSavedAdjustment(message, input, pending) {
     const state = store.getState().data;
-    const choice = await interpretSavedAdjustment({ message: input, transactions: state.transactions, categories: state.categories, today: todayInArgentina(), history: await recentHistory(message) });
+    const choice = await interpretSavedAdjustment({ message: input, transactions: state.transactions, categories: state.categories, today: todayInChile(), history: await recentHistory(message) });
     if (choice.clarification || !choice.sourceId) {
-      await message.reply({ content: String(choice.clarification || '¿Cuál gasto guardado querés corregir? Indicá su importe original.').slice(0, 1900), allowedMentions: { parse: [] } });
+      await message.reply({ content: String(choice.clarification || '¿Cuál gasto guardado quieres corregir? Indica su importe original.').slice(0, 1900), allowedMentions: { parse: [] } });
       return;
     }
     const rows = buildSavedAdjustment({ message: input, choice, transactions: state.transactions, categories: state.categories });
@@ -130,10 +130,10 @@ function createDiscordBot(store, config, onStatus = () => {}) {
         pending = null;
       }
       if (!pending && !attachments.length && /^(guardar|confirmar|listo|sí|si|cancelar|descartar|olvidar|mostrar|ver propuesta)$/i.test(input)) {
-        await message.reply({ content: 'No hay una propuesta pendiente. Mandá una captura o un gasto primero.', allowedMentions: { parse: [] } });
-      } else if (!attachments.length && /^(?:ayuda|a\s+q(?:u[eé])?\s+te\s+refer[ií]s|qu[eé]\s+quer[eé]s\s+decir)\??$/i.test(input)) {
-        await message.reply({ content: 'Primero te muestro una propuesta; no guardo movimientos hasta que escribas **guardar**. Podés mandar una captura o un gasto como `Cuotas Mercado Pago $53.349 en Credito`. También podés corregir varias filas, crear categorías o dividir un gasto: `dividí 1 en $600 para Mascotas y el resto en Comida`. Escribí **cancelar** para descartar la propuesta.', allowedMentions: { parse: [] } });
-      } else if (!pending && !attachments.length && (/^(record[aá]|aprend[eé]|acordate)/i.test(input) || isCategoryRequest(input))) {
+        await message.reply({ content: 'No hay una propuesta pendiente. Manda una captura o un gasto primero.', allowedMentions: { parse: [] } });
+      } else if (!attachments.length && /^(?:ayuda|a\s+q(?:u[eé])?\s+te\s+refer[ií]s|refieres|qu[eé]\s+quer[eé]s|quieres\s+decir)\??$/i.test(input)) {
+        await message.reply({ content: 'Primero te muestro una propuesta; no guardo movimientos hasta que escribas **guardar**. Puedes mandar una captura o un gasto como `Cuotas Mercado Pago $53.349 en Credito`. También puedes corregir varias filas, crear categorías o dividir un gasto: `divide 1 en $600 para Mascotas y el resto en Comida`. Escribe **cancelar** para descartar la propuesta.', allowedMentions: { parse: [] } });
+      } else if (!pending && !attachments.length && (/^(record[aá]|recuerda|aprend[eé]|aprende|acordate|acu[eé]rdate)/i.test(input) || isCategoryRequest(input))) {
         await handlePlan(message, input, null);
       } else if (pending && !attachments.length && /^(mostrar|ver propuesta)$/i.test(input)) {
         await message.reply({ content: preview(pending, store.getState().data.categories), allowedMentions: { parse: [] } });
@@ -154,16 +154,16 @@ function createDiscordBot(store, config, onStatus = () => {}) {
         const state = store.getState().data;
         const referenceRows = !images.length && /\b(?:el de|la fila|el\s+\d+|era el|ya est[aá] guardado|captura anterior)\b/i.test(input)
           ? store.latestUsefulBatch(message.channelId, message.author.id)?.rows || [] : [];
-        const rows = await extractBatch({ images, caption: input, categories: state.categories, rules: store.merchantRules(), existing: state.transactions, today: todayInArgentina(), referenceRows });
+        const rows = await extractBatch({ images, caption: input, categories: state.categories, rules: store.merchantRules(), existing: state.transactions, today: todayInChile(), referenceRows });
         if (!rows.length) {
-          await message.reply({ content: 'No encontré un movimiento concreto para proponer. Si hablás de una captura anterior, decime el comercio y el importe, por ejemplo: `Cuotas Mercado Pago $53.349 en Credito`. No guardé nada.', allowedMentions: { parse: [] } });
+          await message.reply({ content: 'No encontré un movimiento concreto para proponer. Si hablas de una captura anterior, dime el comercio y el importe, por ejemplo: `Cuotas Mercado Pago $53.349 en Credito`. No guardé nada.', allowedMentions: { parse: [] } });
         } else {
           if (pending) store.updateBatch(pending.id, pending.rows, 'cancelled');
           const batch = store.saveBatch({ id: message.id, channelId: message.channelId, authorId: message.author.id, rows });
           await message.reply({ content: preview(batch, state.categories), allowedMentions: { parse: [] } });
         }
       } else if (input) {
-        await message.reply({ content: 'No hay una propuesta para corregir. Mandá una captura o escribí un gasto con importe, por ejemplo: `Cuotas Mercado Pago $53.349 en Credito`. No guardé nada.', allowedMentions: { parse: [] } });
+        await message.reply({ content: 'No hay una propuesta para corregir. Manda una captura o escribe un gasto con importe, por ejemplo: `Cuotas Mercado Pago $53.349 en Credito`. No guardé nada.', allowedMentions: { parse: [] } });
       } else return;
       store.markDiscordMessageSeen(message.id);
     } catch (error) {

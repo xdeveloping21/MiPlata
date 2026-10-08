@@ -19,7 +19,7 @@ test('Discord batch stores only confirmed included movements and learns merchant
     store.setMerchantRule('Pepito Miguel', 'food');
     assert.deepEqual(store.merchantRules(), [{ merchant: 'Pepito Miguel', categoryId: 'food' }]);
     const rows = [
-      { title: 'Pepito Miguel', kind: 'expense', amount: 560, currency: 'ARS', date: '2026-10-03', time: '12:10', categoryId: 'food', include: true, reason: '' },
+      { title: 'Pepito Miguel', kind: 'expense', amount: 560, currency: 'CLP', date: '2026-10-03', time: '12:10', categoryId: 'food', include: true, reason: '' },
       { title: 'Cloudflare', kind: 'expense', amount: 5, currency: 'USD', date: '2026-10-03', time: '09:00', categoryId: null, include: false, reason: 'Tarjeta' }
     ];
     const id = '1555788208703414336';
@@ -70,10 +70,10 @@ test('one Discord message can rename, recategorize and ignore several rows toget
     { id: 'other-income', name: 'Otros ingresos', kind: 'income' }
   ];
   const rows = [
-    { title: 'Eliana Perez', kind: 'expense', amount: 30000, currency: 'ARS', date: '2026-10-06', categoryId: null, include: false, reason: 'Persona sin regla' },
-    { title: 'Abraham Yucra', kind: 'expense', amount: 2000, currency: 'ARS', date: '2026-10-06', categoryId: null, include: false, reason: 'Persona sin regla' },
-    { title: 'Diego Sole', kind: 'income', amount: 35000, currency: 'ARS', date: '2026-10-06', categoryId: null, include: false, reason: 'Origen incierto' },
-    { title: 'Avica', kind: 'expense', amount: 24876, currency: 'ARS', date: '2026-10-06', categoryId: null, include: false, reason: 'Categoría incierta' }
+    { title: 'Eliana Perez', kind: 'expense', amount: 30000, currency: 'CLP', date: '2026-10-06', categoryId: null, include: false, reason: 'Persona sin regla' },
+    { title: 'Abraham Yucra', kind: 'expense', amount: 2000, currency: 'CLP', date: '2026-10-06', categoryId: null, include: false, reason: 'Persona sin regla' },
+    { title: 'Diego Sole', kind: 'income', amount: 35000, currency: 'CLP', date: '2026-10-06', categoryId: null, include: false, reason: 'Origen incierto' },
+    { title: 'Avica', kind: 'expense', amount: 24876, currency: 'CLP', date: '2026-10-06', categoryId: null, include: false, reason: 'Categoría incierta' }
   ];
   const message = '1 Ropa y que sea Costurera, 2 verdulería, 3 ingreso extra ponele Trabajo Pintura, ignorá 4';
   const interpretation = await interpretCorrections({ message, batch: { rows }, categories, runStructured: async (schema, prompt) => {
@@ -102,7 +102,7 @@ test('Discord can create a category and split one pending expense without changi
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'misgastos-discord-split-'));
   const store = await openStore(folder, initialStatePath);
   try {
-    const original = { title: 'Compra mixta', kind: 'expense', amount: 1000, currency: 'ARS', date: '2026-10-08', time: '11:30', categoryId: 'food', include: true, reason: '' };
+    const original = { title: 'Compra mixta', kind: 'expense', amount: 1000, currency: 'CLP', date: '2026-10-08', time: '11:30', categoryId: 'food', include: true, reason: '' };
     const id = '1555788208703414399';
     store.saveBatch({ id, channelId: '1555788208703414335', authorId: '1555788208703414334', rows: [original] });
     const plan = applyCorrections({ message: 'creá Mascotas y dividí 1: 600 en Mascotas y el resto en Alimentación', rows: [original], categories: store.getState().data.categories, edits: [
@@ -127,7 +127,7 @@ test('Discord can create a category and split one pending expense without changi
 });
 
 test('A split with a wrong total leaves the proposal untouched', () => {
-  const rows = [{ title: 'Compra', kind: 'expense', amount: 1000, currency: 'ARS', date: '2026-10-08', categoryId: 'food', include: true, reason: '' }];
+  const rows = [{ title: 'Compra', kind: 'expense', amount: 1000, currency: 'CLP', date: '2026-10-08', categoryId: 'food', include: true, reason: '' }];
   assert.throws(() => applyCorrections({ message: 'dividí 1 en 600 y 300', rows, categories: [{ id: 'food', name: 'Comida', kind: 'expense' }], edits: [
     { action: 'split', index: 1, parts: [
       { amount: 600, categoryId: 'food', categoryName: null, title: null },
@@ -174,8 +174,8 @@ test('A saved expense is reduced and its new part is inserted only after confirm
 
 test('a partial multi-row correction does not change any row', () => {
   const rows = [
-    { title: 'A', kind: 'expense', currency: 'ARS', categoryId: null, include: false },
-    { title: 'B', kind: 'expense', currency: 'ARS', categoryId: null, include: false }
+    { title: 'A', kind: 'expense', currency: 'CLP', categoryId: null, include: false },
+    { title: 'B', kind: 'expense', currency: 'CLP', categoryId: null, include: false }
   ];
   assert.throws(() => applyCorrections({
     message: '1 ropa 2 comida', rows, categories: [
@@ -186,7 +186,7 @@ test('a partial multi-row correction does not change any row', () => {
 });
 
 test('A card installment is excluded from screenshots but accepted as an explicit manual expense', async () => {
-  const referenceRows = [{ title: 'Cuotas Mercado Pago', kind: 'expense', amount: 53349, currency: 'ARS', date: '2026-10-01', time: '12:41', categoryId: 'credit' }];
+  const referenceRows = [{ title: 'Cuotas Mercado Pago', kind: 'expense', amount: 53349, currency: 'CLP', date: '2026-10-01', time: '12:41', categoryId: 'credit' }];
   const runStructured = async (_schema, prompt) => {
     assert.match(prompt, /Cuotas Mercado Pago/);
     return { rows: [{ ...referenceRows[0], include: false, reason: 'Cuotas que se pagarán como un único gasto' }] };
@@ -200,15 +200,15 @@ test('A card installment is excluded from screenshots but accepted as an explici
   assert.equal(screenshot[0].include, false);
 });
 
-test('Vision proposal rounds ARS, applies learned rules and pauses USD or uncertain income', async () => {
+test('Vision proposal rounds CLP, applies learned rules and pauses USD or uncertain income', async () => {
   const runStructured = async (_schema, prompt, images) => {
     assert.match(prompt, /ignora AUSA/);
     assert.deepEqual(images, []);
     return { rows: [
-    { title: 'Pepito Miguel', kind: 'expense', amount: 1197.05, currency: 'ARS', date: '2026-10-01', time: '12:10', categoryId: null, include: false, reason: 'Persona sin categoría' },
-    { title: 'AUSA', kind: 'expense', amount: 1436.13, currency: 'ARS', date: '2026-10-01', time: '09:08', categoryId: 'services', include: true, reason: null },
+    { title: 'Pepito Miguel', kind: 'expense', amount: 1197.05, currency: 'CLP', date: '2026-10-01', time: '12:10', categoryId: null, include: false, reason: 'Persona sin categoría' },
+    { title: 'AUSA', kind: 'expense', amount: 1436.13, currency: 'CLP', date: '2026-10-01', time: '09:08', categoryId: 'services', include: true, reason: null },
     { title: 'Cloudflare', kind: 'expense', amount: 5, currency: 'USD', date: '2026-10-01', time: '07:43', categoryId: 'services', include: true, reason: null },
-    { title: 'Ingreso de dinero', kind: 'income', amount: 858330, currency: 'ARS', date: '2026-10-01', time: '12:38', categoryId: null, include: false, reason: 'Origen incierto' }
+    { title: 'Ingreso de dinero', kind: 'income', amount: 858330, currency: 'CLP', date: '2026-10-01', time: '12:38', categoryId: null, include: false, reason: 'Origen incierto' }
     ] };
   };
   const rows = await extractBatch({ images: [], caption: 'ignora AUSA', categories: [

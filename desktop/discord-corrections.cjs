@@ -2,7 +2,7 @@ const crypto = require('node:crypto');
 const categoryIcons = require('../category-icons.js');
 
 function keyOf(value) {
-  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es-AR').replace(/[^a-z0-9]+/g, ' ').trim();
+  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es-CL').replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
 function mentionedRows(message, count) {
@@ -19,7 +19,7 @@ function mentionedRows(message, count) {
 }
 
 function applyCorrections({ message, rows, categories, edits }) {
-  if (!Array.isArray(edits) || !edits.length) throw new Error('No entendí qué cambiar. Decime qué fila o categoría querés modificar.');
+  if (!Array.isArray(edits) || !edits.length) throw new Error('No entendí qué cambiar. Dime qué fila o categoría quieres modificar.');
   const requested = mentionedRows(message, rows.length);
   const changed = new Set();
   const nextRows = rows.map((row) => ({ ...row }));
@@ -64,13 +64,13 @@ function applyCorrections({ message, rows, categories, edits }) {
     changed.add(edit.index);
 
     if (edit.action === 'ignore') {
-      if (row.adjustmentGroup) throw new Error('No podés ignorar una sola parte de un gasto guardado. Escribí cancelar para descartar toda la corrección.');
+      if (row.adjustmentGroup) throw new Error('No puedes ignorar una sola parte de un gasto guardado. Escribe cancelar para descartar toda la corrección.');
       row.include = false;
       row.reason = 'Ignorado por indicación tuya';
       continue;
     }
     if (edit.action === 'include') {
-      if (row.currency !== 'ARS' || categoryMap.get(row.categoryId)?.kind !== row.kind) throw new Error('Primero indicá una categoría válida en ARS para la fila ' + edit.index);
+      if (row.currency !== 'CLP' || categoryMap.get(row.categoryId)?.kind !== row.kind) throw new Error('Primero indica una categoría válida en CLP para la fila ' + edit.index);
       row.include = true;
       row.reason = '';
       continue;
@@ -78,21 +78,21 @@ function applyCorrections({ message, rows, categories, edits }) {
 
     if (edit.action === 'split') {
       const parts = edit.parts;
-      if (!Array.isArray(parts) || parts.length < 2 || parts.length > 10 || row.currency !== 'ARS' || !Number.isSafeInteger(row.amount) || row.amount <= 0) throw new Error('No puedo dividir la fila ' + edit.index + ' en esas partes');
+      if (!Array.isArray(parts) || parts.length < 2 || parts.length > 10 || row.currency !== 'CLP' || !Number.isSafeInteger(row.amount) || row.amount <= 0) throw new Error('No puedo dividir la fila ' + edit.index + ' en esas partes');
       let remainderIndex = -1;
       let used = 0;
       const divided = parts.map((part, partIndex) => {
         if (!part || typeof part !== 'object') throw new Error('Falta una parte de la división');
         const amount = part.amount == null ? null : Math.round(Number(part.amount));
         if (amount === null) {
-          if (remainderIndex !== -1) throw new Error('Indicá un solo resto para la fila ' + edit.index);
+          if (remainderIndex !== -1) throw new Error('Indica un solo resto para la fila ' + edit.index);
           remainderIndex = partIndex;
         } else {
           if (!Number.isSafeInteger(amount) || amount <= 0) throw new Error('Los importes de la fila ' + edit.index + ' deben ser positivos');
           used += amount;
         }
         const category = resolveCategory(part.categoryId, part.categoryName, row.kind) || categoryMap.get(row.categoryId);
-        if (!category || category.kind !== row.kind || ['savings', 'savings-return'].includes(category.id)) throw new Error('Indicá la categoría de cada parte de la fila ' + edit.index);
+        if (!category || category.kind !== row.kind || ['savings', 'savings-return'].includes(category.id)) throw new Error('Indica la categoría de cada parte de la fila ' + edit.index);
         const title = part.title == null ? row.title : String(part.title).trim();
         if (!title || title.length > 80) throw new Error('Nombre inválido en la división de la fila ' + edit.index);
         const dividedPart = { ...row, amount, categoryId: category.id, title };
@@ -116,7 +116,7 @@ function applyCorrections({ message, rows, categories, edits }) {
     if (category) row.categoryId = category.id;
     if (title !== null) row.title = title;
     const validCategory = categoryMap.get(row.categoryId)?.kind === row.kind;
-    const needsReview = row.currency !== 'ARS' || /tarjeta|cuota|usd|d[oó]lar|repetid|ya cargado|moneda|fecha|ilegible/i.test(row.reason || '');
+    const needsReview = row.currency !== 'CLP' || /tarjeta|cuota|usd|d[oó]lar|repetid|ya cargado|moneda|fecha|ilegible/i.test(row.reason || '');
     if (validCategory && !needsReview) { row.include = true; row.reason = ''; }
     if (row.kind === 'expense' && validCategory && (edit.remember === true || (category && !/solo esta vez/i.test(message)))) rules.set(rows[edit.index - 1].title, row.categoryId);
   }

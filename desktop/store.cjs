@@ -28,7 +28,7 @@ function validateState(state) {
   const categoryMap = new Map(categories.map((item) => [item.id, item]));
   if (categoryMap.get('savings')?.kind !== 'expense' || categoryMap.get('savings-return')?.kind !== 'income') throw new Error('Faltan categorías de ahorro');
   const transactionIds = new Set();
-  const balances = { ARS: 0, USD: 0 };
+  const balances = { CLP: 0, USD: 0 };
   const transactions = state.transactions.map((item) => {
     if (!item || typeof item.id !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(item.id) || transactionIds.has(item.id) || !['expense', 'income'].includes(item.kind) || !Number.isSafeInteger(item.amount) || item.amount <= 0 || item.amount > 1e12 || typeof item.title !== 'string' || !item.title.trim() || item.title.length > 80 || !validDate(item.date) || categoryMap.get(item.categoryId)?.kind !== item.kind) throw new Error('Movimiento inválido');
     transactionIds.add(item.id);
@@ -42,9 +42,10 @@ function validateState(state) {
       if (item.note.trim()) clean.note = item.note.trim();
     }
     if (item.categoryId === 'savings' || item.categoryId === 'savings-return') {
-      const currency = item.savingsCurrency || 'ARS';
+      // Los ahorros guardados como ARS por versiones anteriores se leen como CLP.
+      const currency = !item.savingsCurrency || item.savingsCurrency === 'ARS' ? 'CLP' : item.savingsCurrency;
       const units = item.savingsAmount ?? item.amount;
-      if (!['ARS', 'USD'].includes(currency) || typeof units !== 'number' || !Number.isFinite(units) || units <= 0 || !Number.isSafeInteger(Math.round(units * 100)) || Math.abs(units * 100 - Math.round(units * 100)) > 0.00001) throw new Error('Ahorro inválido');
+      if (!['CLP', 'USD'].includes(currency) || typeof units !== 'number' || !Number.isFinite(units) || units <= 0 || !Number.isSafeInteger(Math.round(units * 100)) || Math.abs(units * 100 - Math.round(units * 100)) > 0.00001) throw new Error('Ahorro inválido');
       clean.savingsCurrency = currency;
       clean.savingsAmount = units;
       balances[currency] += (item.categoryId === 'savings' ? 1 : -1) * units;
@@ -162,7 +163,7 @@ async function openStore(userDataPath, initialStatePath) {
   }
 
   function merchantKey(name) {
-    return String(name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es-AR').replace(/[^a-z0-9]+/g, ' ').trim();
+    return String(name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es-CL').replace(/[^a-z0-9]+/g, ' ').trim();
   }
 
   function merchantRules() {
@@ -239,7 +240,7 @@ async function openStore(userDataPath, initialStatePath) {
     if (batchId && (!pending || pending.status !== 'pending')) throw new Error('La propuesta ya no está pendiente');
     if (!Array.isArray(plan.rows) || plan.rows.length > 30 || !Array.isArray(plan.createdCategories) || !Array.isArray(plan.rules)) throw new Error('Cambios de Discord inválidos');
     const current = getState();
-    if (expectedRevision !== undefined && current.revision !== expectedRevision) throw new Error('Las categorías cambiaron mientras analizaba el mensaje. Repetí la instrucción.');
+    if (expectedRevision !== undefined && current.revision !== expectedRevision) throw new Error('Las categorías cambiaron mientras analizaba el mensaje. Repite la instrucción.');
     const clean = validateState({ ...current.data, categories: plan.categories });
     const validRules = validatedMerchantRules(plan.rules, clean.categories);
     if (plan.createdCategories.length) backupDaily();
@@ -269,7 +270,7 @@ async function openStore(userDataPath, initialStatePath) {
       const sourceRows = rows.filter((row) => row.sourceTransactionId === groupId);
       const source = current.data.transactions.find((item) => item.id === groupId);
       const reference = sourceRows[0]?.sourceOriginal;
-      if (!source || sourceRows.length !== 1 || !reference || rows.some((row) => !row.include || row.kind !== source.kind || row.currency !== 'ARS' || row.date !== source.date || (row.sourceTransactionId && row.sourceTransactionId !== groupId))) throw new Error('La corrección guardada cambió. Cancelala y prepará una propuesta nueva.');
+      if (!source || sourceRows.length !== 1 || !reference || rows.some((row) => !row.include || row.kind !== source.kind || row.currency !== 'CLP' || row.date !== source.date || (row.sourceTransactionId && row.sourceTransactionId !== groupId))) throw new Error('La corrección guardada cambió. Cancélala y prepara una propuesta nueva.');
       if (['amount', 'title', 'categoryId', 'date', 'kind'].some((key) => source[key] !== reference[key]) || rows.reduce((sum, row) => sum + row.amount, 0) !== source.amount) throw new Error('El gasto original cambió o las partes no suman el mismo total');
       const edited = sourceRows[0];
       updates.set(groupId, { ...source, amount: edited.amount, title: edited.title, categoryId: edited.categoryId });

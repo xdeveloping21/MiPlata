@@ -7,12 +7,12 @@ const CATEGORY_ICON_CATALOG = {
   },
   "home": {
     "label": "Casa",
-    "keywords": "vivienda alquiler hogar",
+    "keywords": "vivienda arriendo alquiler hogar",
     "svg": ""
   },
   "bus": {
-    "label": "Colectivo",
-    "keywords": "transporte sube",
+    "label": "Micro",
+    "keywords": "transporte bus bip",
     "svg": "<path d=\"M8 6v6\"/><path d=\"M15 6v6\"/><path d=\"M2 12h19.6\"/><path d=\"M18 18h3s.5-1.7.8-2.8c.1-.4.2-.8.2-1.2 0-.4-.1-.8-.2-1.2l-1.4-5C20.1 6.8 19.1 6 18 6H4a2 2 0 0 0-2 2v10h3\"/><circle cx=\"7\" cy=\"18\" r=\"2\"/><path d=\"M9 18h5\"/><circle cx=\"16\" cy=\"18\" r=\"2\"/>"
   },
   "heart": {
@@ -107,7 +107,7 @@ const CATEGORY_ICON_CATALOG = {
   },
   "train-front": {
     "label": "Tren",
-    "keywords": "subte transporte",
+    "keywords": "metro transporte",
     "svg": "<path d=\"M8 3.1V7a4 4 0 0 0 8 0V3.1\"/><path d=\"m9 15-1-1\"/><path d=\"m15 15 1-1\"/><path d=\"M9 19c-2.8 0-5-2.2-5-5v-4a8 8 0 0 1 16 0v4c0 2.8-2.2 5-5 5Z\"/><path d=\"m8 19-2 3\"/><path d=\"m16 19 2 3\"/>"
   },
   "plane": {
@@ -117,7 +117,7 @@ const CATEGORY_ICON_CATALOG = {
   },
   "fuel": {
     "label": "Combustible",
-    "keywords": "nafta gasolina",
+    "keywords": "bencina gasolina",
     "svg": "<path d=\"M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 4 0v-6.998a2 2 0 0 0-.59-1.42L18 5\"/><path d=\"M14 21V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v16\"/><path d=\"M2 21h13\"/><path d=\"M3 9h11\"/>"
   },
   "truck": {
@@ -247,7 +247,7 @@ const CATEGORY_ICON_CATALOG = {
   },
   "key-round": {
     "label": "Llaves",
-    "keywords": "alquiler vivienda",
+    "keywords": "arriendo alquiler vivienda",
     "svg": "<path d=\"M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z\"/><circle cx=\"16.5\" cy=\"7.5\" r=\".5\" fill=\"currentColor\"/>"
   },
   "bed-double": {
