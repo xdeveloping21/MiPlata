@@ -32,3 +32,24 @@ test('store saves and restores a backup', async () => {
     fs.rmSync(folder, { recursive: true, force: true });
   }
 });
+
+test('receipts are stored apart and linked from a transaction', async () => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'miplata-receipt-test-'));
+  try {
+    const store = await openStore(folder, initialState);
+    assert.throws(() => store.saveReceipt(Buffer.from('<svg></svg>')), /no es una imagen/);
+    const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64)]);
+    const { id } = store.saveReceipt(jpeg);
+    assert.match(id, /^r[A-Za-z0-9_-]{16,64}$/);
+    assert.deepEqual(store.readReceipt(id), { bytes: jpeg, type: 'image/jpeg' });
+    assert.equal(store.readReceipt('../miplata'), null);
+    const current = store.getState();
+    const transaction = { id: 't1', kind: 'expense', amount: 8990, title: 'Supermercado', categoryId: 'transport', date: '2026-10-08', receiptId: id };
+    store.saveState(current.revision, { ...current.data, transactions: [transaction] });
+    assert.equal(store.getState().data.transactions[0].receiptId, id);
+    assert.throws(() => validateState({ ...current.data, transactions: [{ ...transaction, receiptId: '../x' }] }), /Boleta inválida/);
+    store.close();
+  } finally {
+    fs.rmSync(folder, { recursive: true, force: true });
+  }
+});

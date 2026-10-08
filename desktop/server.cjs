@@ -64,6 +64,17 @@ async function readBody(req) {
   return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
 }
 
+async function readRaw(req, limit) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > limit) throw new Error('La imagen es demasiado grande');
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
 function startServer(store, root, onPending) {
   const pending = new Map();
   let pairToken = null;
@@ -117,6 +128,17 @@ function startServer(store, root, onPending) {
         const body = await readBody(req);
         const result = store.saveState(body.revision, body.data);
         return json(res, result.conflict ? 409 : 200, result);
+      }
+      if (pathname === '/api/receipts' && req.method === 'POST') {
+        if (!/^image\/(jpeg|png|webp)$/.test(String(req.headers['content-type'] || ''))) return json(res, 415, { error: 'Solo se aceptan imágenes JPG, PNG o WebP' });
+        const bytes = await readRaw(req, 6_000_000);
+        try { return json(res, 200, store.saveReceipt(bytes)); } catch (error) { return json(res, 400, { error: error.message }); }
+      }
+      if (pathname.startsWith('/api/receipts/') && req.method === 'GET') {
+        const receipt = store.readReceipt(pathname.slice('/api/receipts/'.length));
+        if (!receipt) return json(res, 404, { error: 'Boleta no encontrada' });
+        res.writeHead(200, { 'Content-Type': receipt.type, 'Content-Length': receipt.bytes.length, 'Cache-Control': 'private, max-age=31536000, immutable', 'Content-Security-Policy': "default-src 'none'", 'X-Content-Type-Options': 'nosniff' });
+        return res.end(receipt.bytes);
       }
 
       if (pathname.startsWith('/api/') && !isLocal) return json(res, 403, { error: 'Esta acción se hace en la PC' });

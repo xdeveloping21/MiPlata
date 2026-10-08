@@ -73,7 +73,9 @@ const iconPaths = {
   eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
   download: '<path d="M12 3v12m-4-4 4 4 4-4M4 17v4h16v-4"/>',
   reset: '<path d="M3 11a9 9 0 1 1 2 6M3 4v7h7"/>',
-  info: '<circle cx="12" cy="12" r="10"/><path d="M12 11v6M12 7h.01"/>'
+  info: '<circle cx="12" cy="12" r="10"/><path d="M12 11v6M12 7h.01"/>',
+  receipt: '<path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6M9 15h4"/>',
+  image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>'
 };
 
 function icon(name, size) {
@@ -156,6 +158,11 @@ let desktopInfo = { networks: [], devices: [], pending: [], backupDir: '' };
 let pairingInfo = null;
 let selectedNetwork = '';
 let restoreCandidate = null;
+let filtersOpen = false;
+let rangeFrom = '';
+let rangeTo = '';
+let amountMin = '';
+let amountMax = '';
 
 function saveData() {
   if (LIVE) {
@@ -560,7 +567,7 @@ function transactionRow(item, compact) {
   const category = categoryById(item.categoryId);
   return '<button class="transaction-row' + (compact ? ' is-compact' : '') + '" type="button" data-edit-transaction="' + escapeHtml(item.id) + '">' +
     categoryIcon(category) +
-    '<span class="transaction-detail"><strong>' + escapeHtml(item.title) + '</strong><small>' + (item.note ? escapeHtml(item.note) + ' <span class="detail-separator">·</span> ' : '') + escapeHtml(category ? category.name : 'Sin categoría') + ' <span class="detail-separator">·</span> ' + prettyDate(item.date) + (isSavingsEntry(item) && savingsCurrency(item) !== 'CLP' ? ' <span class="detail-separator">·</span> ' + escapeHtml(formatSavings(savingsCurrency(item), savingsUnits(item))) + ' ahorrados' : '') + '</small></span>' +
+    '<span class="transaction-detail"><strong>' + escapeHtml(item.title) + (item.receiptId ? '<span class="receipt-mark" title="Tiene boleta" aria-label="Tiene boleta">' + icon('receipt', 13) + '</span>' : '') + '</strong><small>' + (item.note ? escapeHtml(item.note) + ' <span class="detail-separator">·</span> ' : '') + escapeHtml(category ? category.name : 'Sin categoría') + ' <span class="detail-separator">·</span> ' + prettyDate(item.date) + (isSavingsEntry(item) && savingsCurrency(item) !== 'CLP' ? ' <span class="detail-separator">·</span> ' + escapeHtml(formatSavings(savingsCurrency(item), savingsUnits(item))) + ' ahorrados' : '') + '</small></span>' +
     '<span class="transaction-amount ' + item.kind + '">' + (item.kind === 'income' ? '+ ' : '- ') + money(item.amount) + '</span>' +
     icon('arrowRight', 17) + '</button>';
 }
@@ -641,13 +648,56 @@ function savingsRow(item) {
     '<span class="transaction-amount ' + (deposit ? 'income' : 'expense') + '">' + (deposit ? '+ ' : '- ') + escapeHtml(formatSavings(currency, savingsUnits(item))) + '</span>' + icon('arrowRight', 17) + '</button>';
 }
 
-function renderTransactions() {
-  const visible = selectedTransactions().filter(function (item) {
+// Filtros por rango de fechas y de montos. Si hay fechas, se busca en todos los meses.
+function activeFilterCount() {
+  return [rangeFrom, rangeTo, amountMin, amountMax].filter(Boolean).length;
+}
+
+function filteredTransactions() {
+  const dates = [rangeFrom, rangeTo];
+  if (rangeFrom && rangeTo && rangeFrom > rangeTo) dates.reverse();
+  let min = amountMin ? parseAmountText(amountMin) : NaN;
+  let max = amountMax ? parseAmountText(amountMax) : NaN;
+  if (Number.isFinite(min) && Number.isFinite(max) && min > max) { const swap = min; min = max; max = swap; }
+  const source = rangeFrom || rangeTo ? sortedTransactions() : selectedTransactions();
+  return source.filter(function (item) {
     const category = categoryById(item.categoryId);
     const matchesFilter = filter === 'all' || item.kind === filter;
     const matchesQuery = !query || (item.title + ' ' + (category ? category.name : '')).toLocaleLowerCase('es-CL').includes(query.toLocaleLowerCase('es-CL'));
-    return matchesFilter && matchesQuery;
+    const matchesDate = (!dates[0] || item.date >= dates[0]) && (!dates[1] || item.date <= dates[1]);
+    const matchesAmount = (!Number.isFinite(min) || item.amount >= min) && (!Number.isFinite(max) || item.amount <= max);
+    return matchesFilter && matchesQuery && matchesDate && matchesAmount;
   });
+}
+
+function filtersPanel() {
+  return '<div class="filters-panel" id="transaction-filters">' +
+    '<div class="filter-field"><label class="field-label" for="filter-from">Desde</label><input class="text-input" id="filter-from" type="date" data-list-filter="from" value="' + escapeHtml(rangeFrom) + '" /></div>' +
+    '<div class="filter-field"><label class="field-label" for="filter-to">Hasta</label><input class="text-input" id="filter-to" type="date" data-list-filter="to" value="' + escapeHtml(rangeTo) + '" /></div>' +
+    '<div class="filter-field"><label class="field-label" for="filter-min">Monto mínimo</label><div class="filter-amount"><span>$</span><input id="filter-min" type="text" inputmode="numeric" autocomplete="off" data-amount-input data-list-filter="min" placeholder="0" value="' + escapeHtml(amountMin) + '" /></div></div>' +
+    '<div class="filter-field"><label class="field-label" for="filter-max">Monto máximo</label><div class="filter-amount"><span>$</span><input id="filter-max" type="text" inputmode="numeric" autocomplete="off" data-amount-input data-list-filter="max" placeholder="Sin límite" value="' + escapeHtml(amountMax) + '" /></div></div>' +
+    '<button class="text-button filters-clear" type="button" data-action="clear-filters">' + icon('close', 15) + ' Limpiar filtros</button></div>';
+}
+
+function transactionResults() {
+  const visible = filteredTransactions();
+  let summary = '';
+  if (activeFilterCount()) {
+    const expense = visible.filter(function (item) { return item.kind === 'expense'; }).reduce(function (sum, item) { return sum + item.amount; }, 0);
+    const income = visible.filter(function (item) { return item.kind === 'income'; }).reduce(function (sum, item) { return sum + item.amount; }, 0);
+    const range = rangeFrom && rangeTo ? 'Del ' + numericDate(rangeFrom < rangeTo ? rangeFrom : rangeTo) + ' al ' + numericDate(rangeFrom < rangeTo ? rangeTo : rangeFrom) : rangeFrom ? 'Desde el ' + numericDate(rangeFrom) : rangeTo ? 'Hasta el ' + numericDate(rangeTo) : escapeHtml(monthLabel(selectedMonth));
+    summary = '<div class="filter-summary"><span>' + range + ' <span class="detail-separator">·</span> ' + visible.length + (visible.length === 1 ? ' movimiento' : ' movimientos') + '</span><span>Gastos <strong>' + money(expense) + '</strong> <span class="detail-separator">·</span> Ingresos <strong>' + money(income) + '</strong></span></div>';
+  }
+  return summary + '<section class="panel all-transactions"><div class="list-heading"><span>Movimiento</span><span>Categoría</span><span>Fecha</span><span>Importe</span></div>' +
+    '<div class="transaction-list">' + (visible.length ? visible.map(function (item) { return transactionRow(item, false); }).join('') : '<div class="empty-state"><strong>Sin movimientos para mostrar</strong><span>' + (activeFilterCount() ? 'Prueba con otros filtros.' : 'Prueba otro mes o agrega uno nuevo.') + '</span></div>') + '</div></section>';
+}
+
+function filterToggleMarkup() {
+  const count = activeFilterCount();
+  return '<button class="filter-toggle' + (filtersOpen || count ? ' is-active' : '') + '" type="button" data-action="toggle-filters" aria-expanded="' + String(filtersOpen) + '" aria-controls="transaction-filters">' + icon('settings', 17) + '<span>Filtros</span>' + (count ? '<span class="filter-count">' + count + '</span>' : '') + '</button>';
+}
+
+function renderTransactions() {
   const actions = '<button class="button button-primary" data-action="add-transaction" type="button">' + icon('plus', 18) + ' Agregar movimiento</button>';
   return pageHeader('TU HISTORIAL', 'Movimientos', 'Encuentra y edita cada ingreso o gasto.', actions, 'transactions-header') +
     '<div class="section-toolbar"><div class="filter-tabs" role="group" aria-label="Tipo de movimiento">' +
@@ -655,9 +705,30 @@ function renderTransactions() {
         const label = { all: 'Todos', expense: 'Gastos', income: 'Ingresos' }[value];
         return '<button type="button" data-filter="' + value + '" class="' + (filter === value ? 'selected' : '') + '">' + label + '</button>';
       }).join('') + '</div>' +
-      '<div class="toolbar-right"><label class="search-field">' + icon('search', 17) + '<input id="transaction-search" placeholder="Buscar movimiento" value="' + escapeHtml(query) + '" aria-label="Buscar movimiento" /></label>' + periodPicker(false) + '</div></div>' +
-    '<section class="panel all-transactions"><div class="list-heading"><span>Movimiento</span><span>Categoría</span><span>Fecha</span><span>Importe</span></div>' +
-      '<div class="transaction-list">' + (visible.length ? visible.map(function (item) { return transactionRow(item, false); }).join('') : '<div class="empty-state"><strong>Sin movimientos para mostrar</strong><span>Prueba otro mes o agrega uno nuevo.</span></div>') + '</div></section>';
+      '<div class="toolbar-right"><label class="search-field">' + icon('search', 17) + '<input id="transaction-search" placeholder="Buscar movimiento" value="' + escapeHtml(query) + '" aria-label="Buscar movimiento" /></label><span data-filter-toggle>' + filterToggleMarkup() + '</span>' + (rangeFrom || rangeTo ? '' : periodPicker(false)) + '</div></div>' +
+    (filtersOpen ? filtersPanel() : '') +
+    '<div id="transaction-results">' + transactionResults() + '</div>';
+}
+
+// Al escribir en un filtro solo se redibuja la lista, para no perder el foco del campo.
+function applyListFilter(input) {
+  const key = input.dataset.listFilter;
+  const hadRange = Boolean(rangeFrom || rangeTo);
+  if (key === 'from') rangeFrom = input.value;
+  else if (key === 'to') rangeTo = input.value;
+  else if (key === 'min') amountMin = input.value;
+  else if (key === 'max') amountMax = input.value;
+  if (hadRange !== Boolean(rangeFrom || rangeTo)) {
+    const position = input.type === 'text' ? input.selectionStart : null;
+    render();
+    const replacement = document.getElementById(input.id);
+    if (replacement) { replacement.focus(); if (position !== null) replacement.setSelectionRange(position, position); }
+    return;
+  }
+  const results = document.getElementById('transaction-results');
+  if (results) results.innerHTML = transactionResults();
+  const toggle = document.querySelector('[data-filter-toggle]');
+  if (toggle) toggle.innerHTML = filterToggleMarkup();
 }
 
 function categoryRow(category, index, list) {
@@ -786,8 +857,99 @@ function transactionModal() {
     '<div class="form-row"><div>' + customSelect('category-picker', 'Categoría', 'category', item ? item.categoryId : modal.categoryId || '', categories.map(function (category) {
       return { value: category.id, label: category.name, leading: '<span class="dropdown-symbol ' + toneClass(category.tone) + '"' + toneStyle(category.tone) + '>' + icon(category.icon, 16) + '</span>' };
     }), 'form-dropdown') + '</div><div>' + datePicker(date) + '</div></div>' +
+    '<span class="field-label" id="receipt-label">Boleta o captura <span class="field-optional">(opcional)</span></span><div class="receipt-field" data-receipt-field>' + receiptFieldMarkup() + '</div>' +
     '<div class="dialog-actions">' + (item ? '<button class="button button-danger" type="button" data-action="delete-transaction">' + icon('trash', 17) + '<span>Eliminar</span></button>' : '') +
       '<button class="button button-primary" type="submit">' + (item ? 'Guardar cambios' : kind === 'income' ? 'Guardar ingreso' : 'Guardar gasto') + '</button></div></form></div>';
+}
+
+// Boletas: se guardan aparte en la PC y el movimiento solo guarda su identificador.
+const RECEIPT_DEMO_KEY = 'miplata-prototype-receipts';
+
+function demoReceipts() {
+  try { return JSON.parse(localStorage.getItem(RECEIPT_DEMO_KEY)) || {}; } catch (error) { return {}; }
+}
+
+function receiptSrc(id) {
+  return LIVE ? '/api/receipts/' + encodeURIComponent(id) : demoReceipts()[id] || '';
+}
+
+function receiptFieldMarkup() {
+  if (modal.receiptUploading) return '<div class="receipt-empty is-busy">' + icon('image', 20) + '<span>Preparando la imagen...</span></div>';
+  const picker = '<input id="receipt-file" type="file" accept="image/*" hidden />';
+  if (!modal.receiptId) {
+    return '<label class="receipt-empty" for="receipt-file">' + icon('image', 20) + '<span><strong>Adjuntar foto o captura</strong><small>Toma una foto de la boleta o elige una imagen.</small></span></label>' + picker;
+  }
+  return '<div class="receipt-preview"><button class="receipt-thumb" type="button" data-action="view-receipt" aria-label="Ver boleta"><img src="' + escapeHtml(receiptSrc(modal.receiptId)) + '" alt="Boleta adjunta" data-receipt-image /></button>' +
+    '<div class="receipt-actions"><button class="text-button" type="button" data-action="view-receipt">' + icon('eye', 15) + ' Ver</button><label class="text-button" for="receipt-file">' + icon('image', 15) + ' Cambiar</label><button class="text-button receipt-remove" type="button" data-action="remove-receipt">' + icon('trash', 15) + ' Quitar</button></div></div>' + picker;
+}
+
+function refreshReceiptField() {
+  const field = document.querySelector('[data-receipt-field]');
+  if (field && modal && modal.type === 'transaction') field.innerHTML = receiptFieldMarkup();
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise(function (resolve, reject) {
+    const reader = new FileReader();
+    reader.onload = function () { resolve(reader.result); };
+    reader.onerror = function () { reject(new Error('No se pudo leer la imagen')); };
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImage(source) {
+  return new Promise(function (resolve, reject) {
+    const image = new Image();
+    image.onload = function () { resolve(image); };
+    image.onerror = function () { reject(new Error('No se pudo abrir la imagen. Prueba con una foto JPG o PNG.')); };
+    image.src = source;
+  });
+}
+
+// Achica la imagen a un tamaño legible (2000 px por lado como máximo) antes de guardarla.
+async function compressReceipt(file) {
+  if (!file.type.startsWith('image/')) throw new Error('Elige una imagen');
+  if (file.size > 40000000) throw new Error('La imagen es demasiado grande');
+  const image = await loadImage(await readFileAsDataUrl(file));
+  const scale = Math.min(1, 2000 / Math.max(image.naturalWidth, image.naturalHeight));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const context = canvas.getContext('2d');
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
+async function storeReceipt(file) {
+  const canvas = await compressReceipt(file);
+  if (!LIVE) {
+    const id = 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12).padEnd(10, '0');
+    const receipts = demoReceipts();
+    receipts[id] = canvas.toDataURL('image/jpeg', 0.7);
+    try { localStorage.setItem(RECEIPT_DEMO_KEY, JSON.stringify(receipts)); } catch (error) { throw new Error('No queda espacio en este navegador para la imagen'); }
+    return id;
+  }
+  const blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/jpeg', 0.82); });
+  if (!blob) throw new Error('No se pudo preparar la imagen');
+  const response = await fetch('/api/receipts', { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || 'No se pudo guardar la boleta');
+  return result.id;
+}
+
+function openReceiptViewer(id) {
+  closeReceiptViewer();
+  document.body.insertAdjacentHTML('beforeend', '<div class="receipt-viewer" role="dialog" aria-modal="true" aria-label="Boleta" data-receipt-viewer><button class="icon-button receipt-viewer-close" type="button" data-action="close-receipt-viewer" aria-label="Cerrar">' + icon('close', 20) + '</button><div class="receipt-viewer-backdrop" data-action="close-receipt-viewer"></div><img src="' + escapeHtml(receiptSrc(id)) + '" alt="Boleta" data-receipt-image /></div>');
+  document.querySelector('.receipt-viewer-close').focus();
+}
+
+function closeReceiptViewer() {
+  const viewer = document.querySelector('[data-receipt-viewer]');
+  if (!viewer) return false;
+  viewer.remove();
+  return true;
 }
 
 function updateDescriptionSuggestions() {
@@ -971,7 +1133,7 @@ function moveCategory(id, direction) {
 
 function openTransaction(kind, id, categoryId) {
   const item = id ? data.transactions.find(function (entry) { return entry.id === id; }) : null;
-  modal = { type: 'transaction', kind: item ? item.kind : kind, id: id || null, categoryId: categoryId || null };
+  modal = { type: 'transaction', kind: item ? item.kind : kind, id: id || null, categoryId: categoryId || null, receiptId: item && item.receiptId || null };
   render();
   const amount = document.getElementById('amount');
   if (amount && !id) amount.focus();
@@ -1256,6 +1418,11 @@ document.addEventListener('click', function (event) {
     case 'reload-app': window.location.reload(); break;
     case 'open-pair': pairingStep = data.linked ? 'done' : 'start'; navigate('pair'); break;
     case 'close-modal': modal = null; render(); break;
+    case 'toggle-filters': filtersOpen = !filtersOpen; render(); if (filtersOpen) document.getElementById('filter-from')?.focus(); break;
+    case 'clear-filters': rangeFrom = ''; rangeTo = ''; amountMin = ''; amountMax = ''; render(); break;
+    case 'view-receipt': if (modal && modal.receiptId) openReceiptViewer(modal.receiptId); break;
+    case 'close-receipt-viewer': closeReceiptViewer(); break;
+    case 'remove-receipt': if (modal && modal.type === 'transaction') { modal.receiptId = null; refreshReceiptField(); } break;
     case 'cancel-confirm': modal = modal && modal.returnTo ? modal.returnTo : null; render(); break;
     case 'simulate-request': pairingStep = 'desktop-pending'; render(); break;
     case 'approve-pair': data.linked = true; pairingStep = 'done'; modal = null; saveData(); render(); toast('iPhone vinculado en la demostración'); break;
@@ -1305,7 +1472,11 @@ document.addEventListener('click', function (event) {
 });
 
 document.addEventListener('input', function (event) {
-  if (event.target.matches('[data-amount-input]')) { reformatAmountInput(event.target); return; }
+  if (event.target.matches('[data-amount-input]')) {
+    reformatAmountInput(event.target);
+    if (event.target.matches('[data-list-filter]')) applyListFilter(event.target);
+    return;
+  }
   if (event.target.id === 'title' && modal && modal.type === 'transaction') { updateDescriptionSuggestions(); return; }
   if (event.target.id === 'icon-search') {
     const needle = event.target.value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
@@ -1349,6 +1520,22 @@ document.addEventListener('change', async function (event) {
     const toggle = document.querySelector('[data-custom-tone-toggle]');
     toggle.classList.remove('selected');
     toggle.setAttribute('aria-expanded', 'false');
+    return;
+  }
+  if (event.target.matches('input[type="date"][data-list-filter]')) { applyListFilter(event.target); return; }
+  if (event.target.id === 'receipt-file') {
+    const file = event.target.files && event.target.files[0];
+    if (!file || !modal || modal.type !== 'transaction') return;
+    const current = modal;
+    current.receiptUploading = true;
+    refreshReceiptField();
+    try {
+      const id = await storeReceipt(file);
+      current.receiptId = id;
+      toast('Boleta adjuntada');
+    } catch (error) { toast(error.message); }
+    current.receiptUploading = false;
+    if (modal === current) refreshReceiptField();
     return;
   }
   if (event.target.id !== 'restore-file' || !LIVE || !DESKTOP) return;
@@ -1401,6 +1588,8 @@ document.addEventListener('submit', function (event) {
     const entry = { id: modal.id || 't' + Date.now(), kind: modal.kind, amount: amount, title: title, date: date, categoryId: categoryId };
     if (previous?.createdAt || !previous) entry.createdAt = previous?.createdAt || new Date().toISOString();
     if (note) entry.note = note;
+    if (modal.receiptUploading) { toast('Espera a que termine de cargar la boleta'); return; }
+    if (modal.receiptId) entry.receiptId = modal.receiptId;
     if (isSavingsEntry(entry)) {
       entry.savingsCurrency = previous && isSavingsEntry(previous) ? savingsCurrency(previous) : 'CLP';
       entry.savingsAmount = previous && isSavingsEntry(previous) ? savingsUnits(previous) : amount;
@@ -1430,6 +1619,7 @@ document.addEventListener('submit', function (event) {
     const entry = { id: modal.id || 't' + Date.now(), kind: deposit ? 'expense' : 'income', amount: amount, title: title, date: date, categoryId: deposit ? 'savings' : 'savings-return', savingsCurrency: currency, savingsAmount: units };
     if (previous?.createdAt || !previous) entry.createdAt = previous?.createdAt || new Date().toISOString();
     if (previous && previous.note) entry.note = previous.note;
+    if (previous && previous.receiptId) entry.receiptId = previous.receiptId;
     const remaining = data.transactions.filter(function (item) { return item.id !== entry.id; });
     if (!savingsBalancesValid(remaining.concat(entry))) {
       toast('El retiro no puede superar el ahorro en esa moneda'); return;
@@ -1516,6 +1706,7 @@ document.addEventListener('keydown', function (event) {
     periodPickerElement.querySelector('[data-period-trigger]').focus();
     return;
   }
+  if (event.key === 'Escape' && closeReceiptViewer()) { event.preventDefault(); return; }
   if (event.key === 'Escape' && modal) { modal = modal.type === 'confirmation' && modal.returnTo ? modal.returnTo : null; render(); }
 });
 
@@ -1561,6 +1752,15 @@ document.addEventListener('dragend', function () {
   draggedCategory = null;
   document.querySelectorAll('.dragging').forEach(function (row) { row.classList.remove('dragging'); });
 });
+
+// Una boleta puede faltar si se restauró una copia en otro equipo.
+document.addEventListener('error', function (event) {
+  if (!event.target.matches || !event.target.matches('[data-receipt-image]')) return;
+  const missing = document.createElement('span');
+  missing.className = 'receipt-missing';
+  missing.textContent = 'La imagen de la boleta no está en este equipo.';
+  event.target.replaceWith(missing);
+}, true);
 
 window.addEventListener('storage', function (event) {
   if (LIVE) return;

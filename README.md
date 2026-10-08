@@ -18,6 +18,8 @@ MiPlata es un fork de [MisGastos](https://github.com/ValentinTarnovsky/MisGastos
 - Los campos de monto muestran el punto de miles mientras escribes (10.000, 1.000.000).
 - Estética verde menta en modo claro y oscuro, a juego con el logo.
 - Sin el bot de Discord del original: MiPlata no se conecta a Discord ni ejecuta Claude Code.
+- Filtros por rango de fechas y de montos en Movimientos, con el total de gastos e ingresos de lo filtrado.
+- Foto de la boleta o captura de pantalla opcional en cada movimiento. Las imágenes se guardan en la carpeta `receipts` de los datos de MiPlata, en tu PC, y no se incluyen en la copia JSON exportada.
 - Si MisGastos estaba instalado, MiPlata copia sus datos en el primer inicio, sin borrar ni modificar los originales. También restaura copias JSON de MisGastos; los ahorros en ARS se leen como CLP.
 
 MiPlata usa el mismo puerto (`4174`) que MisGastos, así que no pueden estar abiertos al mismo tiempo. Si tenías MisGastos, desinstálalo después de comprobar que tus datos aparecen en MiPlata.

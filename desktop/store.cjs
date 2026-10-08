@@ -14,6 +14,22 @@ function validDate(value) {
   return !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value;
 }
 
+const RECEIPT_TYPES = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
+const RECEIPT_MAX_BYTES = 6_000_000;
+// Una boleta sin movimiento que la use se borra después de este plazo.
+const RECEIPT_ORPHAN_MS = 30 * 24 * 60 * 60 * 1000;
+
+function validReceiptId(value) {
+  return typeof value === 'string' && /^r[A-Za-z0-9_-]{16,64}$/.test(value);
+}
+
+function receiptExtension(bytes) {
+  if (bytes.length > 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'jpg';
+  if (bytes.length > 8 && bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'png';
+  if (bytes.length > 12 && bytes.toString('latin1', 0, 4) === 'RIFF' && bytes.toString('latin1', 8, 12) === 'WEBP') return 'webp';
+  return null;
+}
+
 function validateState(state) {
   if (!state || typeof state !== 'object' || Array.isArray(state)) throw new Error('Datos inválidos');
   if (!Number.isSafeInteger(state.openingBalance) || Math.abs(state.openingBalance) > 1e12) throw new Error('Saldo inicial inválido');
@@ -41,6 +57,10 @@ function validateState(state) {
       if (typeof item.note !== 'string' || item.note.length > 160) throw new Error('Detalle inválido');
       if (item.note.trim()) clean.note = item.note.trim();
     }
+    if (item.receiptId !== undefined) {
+      if (!validReceiptId(item.receiptId)) throw new Error('Boleta inválida');
+      clean.receiptId = item.receiptId;
+    }
     if (item.categoryId === 'savings' || item.categoryId === 'savings-return') {
       // Los ahorros guardados como ARS por versiones anteriores se leen como CLP.
       const currency = !item.savingsCurrency || item.savingsCurrency === 'ARS' ? 'CLP' : item.savingsCurrency;
@@ -61,6 +81,8 @@ async function openStore(userDataPath, initialStatePath) {
   const dbPath = path.join(userDataPath, 'miplata.sqlite');
   const backupDir = path.join(userDataPath, 'backups');
   fs.mkdirSync(backupDir, { recursive: true });
+  const receiptDir = path.join(userDataPath, 'receipts');
+  fs.mkdirSync(receiptDir, { recursive: true });
   const SQL = await initSqlJs({ locateFile: (file) => require.resolve('sql.js/dist/' + file) });
   let db = fs.existsSync(dbPath) ? new SQL.Database(fs.readFileSync(dbPath)) : new SQL.Database();
   db.run('CREATE TABLE IF NOT EXISTS app_state (id INTEGER PRIMARY KEY CHECK (id = 1), revision INTEGER NOT NULL, payload TEXT NOT NULL)');
@@ -112,6 +134,7 @@ async function openStore(userDataPath, initialStatePath) {
     backupDaily();
     db.run('UPDATE app_state SET revision = ?, payload = ? WHERE id = 1', [current.revision + 1, JSON.stringify(clean)]);
     persist();
+    cleanupReceipts();
     return getState();
   }
 
@@ -132,6 +155,37 @@ async function openStore(userDataPath, initialStatePath) {
     persist();
     return getState();
   }
+
+  function saveReceipt(bytes) {
+    if (!Buffer.isBuffer(bytes) || !bytes.length || bytes.length > RECEIPT_MAX_BYTES) throw new Error('La imagen es demasiado grande');
+    const extension = receiptExtension(bytes);
+    if (!extension) throw new Error('El archivo no es una imagen JPG, PNG o WebP');
+    const id = 'r' + crypto.randomBytes(18).toString('base64url');
+    fs.writeFileSync(path.join(receiptDir, id + '.' + extension), bytes, { flag: 'wx' });
+    return { id };
+  }
+
+  function readReceipt(id) {
+    if (!validReceiptId(id)) return null;
+    for (const [extension, type] of Object.entries(RECEIPT_TYPES)) {
+      const file = path.join(receiptDir, id + '.' + extension);
+      if (fs.existsSync(file)) return { bytes: fs.readFileSync(file), type };
+    }
+    return null;
+  }
+
+  function cleanupReceipts() {
+    try {
+      const used = new Set(getState().data.transactions.map((item) => item.receiptId).filter(Boolean));
+      for (const name of fs.readdirSync(receiptDir)) {
+        const file = path.join(receiptDir, name);
+        if (used.has(name.replace(/\.[a-z]+$/, ''))) continue;
+        if (Date.now() - fs.statSync(file).mtimeMs > RECEIPT_ORPHAN_MS) fs.unlinkSync(file);
+      }
+    } catch (error) { console.error('No se pudieron limpiar las boletas:', error); }
+  }
+
+  cleanupReceipts();
 
   function addDevice(name, token) {
     const id = crypto.randomUUID();
@@ -194,7 +248,7 @@ async function openStore(userDataPath, initialStatePath) {
     persist();
   }
 
-  return { getState, saveState, restoreState, addDevice, deviceForToken, listDevices, revokeDevice, merchantRules, setMerchantRule, replaceMerchantRules, backupDir, dbPath, backupNow, close: () => db.close() };
+  return { getState, saveState, restoreState, addDevice, deviceForToken, listDevices, revokeDevice, merchantRules, setMerchantRule, replaceMerchantRules, saveReceipt, readReceipt, receiptDir, backupDir, dbPath, backupNow, close: () => db.close() };
 }
 
 module.exports = { openStore, validateState };
