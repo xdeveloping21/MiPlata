@@ -53,3 +53,25 @@ test('receipts are stored apart and linked from a transaction', async () => {
     fs.rmSync(folder, { recursive: true, force: true });
   }
 });
+
+test('documents keep their type and are rejected when the content does not match', async () => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'miplata-document-test-'));
+  try {
+    const store = await openStore(folder, initialState);
+    const pdf = Buffer.from('%PDF-1.7\nfactura de prueba\n%%EOF');
+    assert.throws(() => store.saveDocument(pdf, 'factura.html'), /Sube un PDF/);
+    assert.throws(() => store.saveDocument(Buffer.from('<html></html>'), 'factura.pdf'), /no parece un PDF/);
+    assert.throws(() => store.saveDocument(Buffer.from([0, 1, 2]), 'datos.csv'), /no parece un CSV/);
+    const saved = store.saveDocument(pdf, '../Factura 123.pdf');
+    assert.equal(saved.name, '..Factura 123.pdf');
+    assert.deepEqual(store.readDocument(saved.id), { bytes: pdf, extension: 'pdf' });
+    const current = store.getState();
+    const transaction = { id: 't1', kind: 'expense', amount: 8990, title: 'Factura luz', categoryId: 'services', date: '2026-10-08', documentId: saved.id, documentName: saved.name };
+    store.saveState(current.revision, { ...current.data, transactions: [transaction] });
+    assert.equal(store.getState().data.transactions[0].documentName, saved.name);
+    assert.throws(() => validateState({ ...current.data, transactions: [{ ...transaction, documentName: 'virus.exe' }] }), /Documento inválido/);
+    store.close();
+  } finally {
+    fs.rmSync(folder, { recursive: true, force: true });
+  }
+});

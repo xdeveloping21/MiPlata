@@ -85,6 +85,17 @@ function createWindow() {
   mainWindow.webContents.on('render-process-gone', (_event, details) => diagnosticLog?.write('error', 'renderer_process_gone', { reason: details.reason, exitCode: details.exitCode }));
   mainWindow.webContents.setWindowOpenHandler(({ url }) => { if (/^https:\/\//.test(url)) shell.openExternal(url); return { action: 'deny' }; });
   mainWindow.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+  // Los documentos adjuntos (PDF, Excel, Word) se abren con el programa que el equipo tenga para ese tipo.
+  mainWindow.webContents.session.on('will-download', (_event, item) => {
+    if (!/^http:\/\/127\.0\.0\.1:\d+\/api\/documents\//.test(item.getURL())) return;
+    const folder = path.join(app.getPath('temp'), 'MiPlata-documentos');
+    fs.mkdirSync(folder, { recursive: true });
+    const target = path.join(folder, Date.now() + '-' + path.basename(item.getFilename()));
+    item.setSavePath(target);
+    item.once('done', (_doneEvent, state) => {
+      if (state === 'completed') shell.openPath(target).then((error) => { if (error) diagnosticLog?.write('error', 'document_open_failed', { message: error }); });
+    });
+  });
 }
 
 app.on('second-instance', () => showWindow());

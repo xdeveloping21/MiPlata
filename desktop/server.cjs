@@ -134,6 +134,19 @@ function startServer(store, root, onPending) {
         const bytes = await readRaw(req, 6_000_000);
         try { return json(res, 200, store.saveReceipt(bytes)); } catch (error) { return json(res, 400, { error: error.message }); }
       }
+      if (pathname === '/api/documents' && req.method === 'POST') {
+        const bytes = await readRaw(req, 15_000_000);
+        try { return json(res, 200, store.saveDocument(bytes, url.searchParams.get('name'))); } catch (error) { return json(res, 400, { error: error.message }); }
+      }
+      if (pathname.startsWith('/api/documents/') && req.method === 'GET') {
+        const document = store.readDocument(pathname.slice('/api/documents/'.length));
+        if (!document) return json(res, 404, { error: 'Documento no encontrado' });
+        // Siempre como descarga: el archivo nunca se muestra dentro de la app.
+        const name = (url.searchParams.get('name') || '').replace(/[^\p{L}\p{N} ._()-]/gu, '').trim().slice(0, 120).replace(/\.[^.]*$/, '') || 'documento';
+        const filename = name + '.' + document.extension;
+        res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': document.bytes.length, 'Content-Disposition': 'attachment; filename="' + filename.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '') + '"; filename*=UTF-8\'\'' + encodeURIComponent(filename).replace(/[()]/g, (char) => '%' + char.charCodeAt(0).toString(16).toUpperCase()), 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'none'; sandbox", 'X-Content-Type-Options': 'nosniff' });
+        return res.end(document.bytes);
+      }
       if (pathname.startsWith('/api/receipts/') && req.method === 'GET') {
         const receipt = store.readReceipt(pathname.slice('/api/receipts/'.length));
         if (!receipt) return json(res, 404, { error: 'Boleta no encontrada' });

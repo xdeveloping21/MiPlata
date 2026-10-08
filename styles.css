@@ -520,6 +520,11 @@ button.legend-link:hover .legend-name { color: var(--lavender-deep); }
 .receipt-actions { display: flex; flex-wrap: wrap; gap: 4px 10px; }
 .receipt-actions label { cursor: pointer; }
 .receipt-actions .receipt-remove { color: var(--danger-text); }
+.document-preview { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 11px 13px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-raised); }
+.document-icon { display: grid; place-items: center; flex: none; width: 34px; height: 34px; border-radius: 9px; background: var(--lavender-wash); color: var(--lavender-deep); }
+.document-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: 12px; font-weight: 700; }
+.document-actions { margin-top: 6px; }
+a.text-button { text-decoration: none; }
 .receipt-missing { display: block; padding: 6px; color: var(--text-faint); font-size: 11px; line-height: 1.4; }
 .receipt-viewer { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 24px; }
 .receipt-viewer-backdrop { position: absolute; inset: 0; background: rgba(5, 12, 9, .84); }

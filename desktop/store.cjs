@@ -30,6 +30,29 @@ function receiptExtension(bytes) {
   return null;
 }
 
+// Documentos de respaldo (factura, boleta en PDF, planilla). Solo estas extensiones.
+const DOCUMENT_EXTENSIONS = ['pdf', 'xlsx', 'xls', 'ods', 'csv', 'docx', 'doc', 'odt', 'xml', 'txt'];
+const DOCUMENT_MAX_BYTES = 15_000_000;
+
+function validDocumentId(value) {
+  return typeof value === 'string' && /^d[A-Za-z0-9_-]{16,64}$/.test(value);
+}
+
+function cleanDocumentName(value) {
+  const name = String(value || '').replace(/[\u0000-\u001f\u007f\\/:*?"<>|]/g, '').trim().slice(-120);
+  const extension = (name.match(/\.([a-z0-9]+)$/i) || [])[1]?.toLowerCase();
+  return extension && DOCUMENT_EXTENSIONS.includes(extension) && name.length > extension.length + 1 ? { name, extension } : null;
+}
+
+// Revisa que el contenido corresponda a la extensión, para no guardar otra cosa con nombre de PDF.
+function documentMatches(extension, bytes) {
+  const head = bytes.toString('latin1', 0, 8);
+  if (extension === 'pdf') return head.startsWith('%PDF-');
+  if (['xlsx', 'docx', 'ods', 'odt'].includes(extension)) return head.startsWith('PK\u0003\u0004');
+  if (['xls', 'doc'].includes(extension)) return bytes.subarray(0, 8).equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]));
+  return !bytes.subarray(0, 65536).includes(0);
+}
+
 function validateState(state) {
   if (!state || typeof state !== 'object' || Array.isArray(state)) throw new Error('Datos inválidos');
   if (!Number.isSafeInteger(state.openingBalance) || Math.abs(state.openingBalance) > 1e12) throw new Error('Saldo inicial inválido');
@@ -61,6 +84,11 @@ function validateState(state) {
       if (!validReceiptId(item.receiptId)) throw new Error('Boleta inválida');
       clean.receiptId = item.receiptId;
     }
+    if (item.documentId !== undefined || item.documentName !== undefined) {
+      if (!validDocumentId(item.documentId) || !cleanDocumentName(item.documentName) || cleanDocumentName(item.documentName).name !== item.documentName) throw new Error('Documento inválido');
+      clean.documentId = item.documentId;
+      clean.documentName = item.documentName;
+    }
     if (item.categoryId === 'savings' || item.categoryId === 'savings-return') {
       // Los ahorros guardados como ARS por versiones anteriores se leen como CLP.
       const currency = !item.savingsCurrency || item.savingsCurrency === 'ARS' ? 'CLP' : item.savingsCurrency;
@@ -83,6 +111,8 @@ async function openStore(userDataPath, initialStatePath) {
   fs.mkdirSync(backupDir, { recursive: true });
   const receiptDir = path.join(userDataPath, 'receipts');
   fs.mkdirSync(receiptDir, { recursive: true });
+  const documentDir = path.join(userDataPath, 'documents');
+  fs.mkdirSync(documentDir, { recursive: true });
   const SQL = await initSqlJs({ locateFile: (file) => require.resolve('sql.js/dist/' + file) });
   let db = fs.existsSync(dbPath) ? new SQL.Database(fs.readFileSync(dbPath)) : new SQL.Database();
   db.run('CREATE TABLE IF NOT EXISTS app_state (id INTEGER PRIMARY KEY CHECK (id = 1), revision INTEGER NOT NULL, payload TEXT NOT NULL)');
@@ -174,15 +204,38 @@ async function openStore(userDataPath, initialStatePath) {
     return null;
   }
 
+  function saveDocument(bytes, originalName) {
+    const clean = cleanDocumentName(originalName);
+    if (!clean) throw new Error('Sube un PDF, Excel, Word, CSV, XML o TXT');
+    if (!Buffer.isBuffer(bytes) || !bytes.length) throw new Error('El archivo está vacío');
+    if (bytes.length > DOCUMENT_MAX_BYTES) throw new Error('El archivo supera los 15 MB');
+    if (!documentMatches(clean.extension, bytes)) throw new Error('El archivo no parece un ' + clean.extension.toUpperCase() + ' válido');
+    const id = 'd' + crypto.randomBytes(18).toString('base64url');
+    fs.writeFileSync(path.join(documentDir, id + '.' + clean.extension), bytes, { flag: 'wx' });
+    return { id, name: clean.name };
+  }
+
+  function readDocument(id) {
+    if (!validDocumentId(id)) return null;
+    for (const extension of DOCUMENT_EXTENSIONS) {
+      const file = path.join(documentDir, id + '.' + extension);
+      if (fs.existsSync(file)) return { bytes: fs.readFileSync(file), extension };
+    }
+    return null;
+  }
+
   function cleanupReceipts() {
     try {
-      const used = new Set(getState().data.transactions.map((item) => item.receiptId).filter(Boolean));
-      for (const name of fs.readdirSync(receiptDir)) {
-        const file = path.join(receiptDir, name);
-        if (used.has(name.replace(/\.[a-z]+$/, ''))) continue;
-        if (Date.now() - fs.statSync(file).mtimeMs > RECEIPT_ORPHAN_MS) fs.unlinkSync(file);
+      const transactions = getState().data.transactions;
+      const used = new Set(transactions.flatMap((item) => [item.receiptId, item.documentId]).filter(Boolean));
+      for (const folder of [receiptDir, documentDir]) {
+        for (const name of fs.readdirSync(folder)) {
+          const file = path.join(folder, name);
+          if (used.has(name.replace(/\.[a-z0-9]+$/, ''))) continue;
+          if (Date.now() - fs.statSync(file).mtimeMs > RECEIPT_ORPHAN_MS) fs.unlinkSync(file);
+        }
       }
-    } catch (error) { console.error('No se pudieron limpiar las boletas:', error); }
+    } catch (error) { console.error('No se pudieron limpiar las boletas y documentos:', error); }
   }
 
   cleanupReceipts();
@@ -248,7 +301,7 @@ async function openStore(userDataPath, initialStatePath) {
     persist();
   }
 
-  return { getState, saveState, restoreState, addDevice, deviceForToken, listDevices, revokeDevice, merchantRules, setMerchantRule, replaceMerchantRules, saveReceipt, readReceipt, receiptDir, backupDir, dbPath, backupNow, close: () => db.close() };
+  return { getState, saveState, restoreState, addDevice, deviceForToken, listDevices, revokeDevice, merchantRules, setMerchantRule, replaceMerchantRules, saveReceipt, readReceipt, receiptDir, saveDocument, readDocument, documentDir, backupDir, dbPath, backupNow, close: () => db.close() };
 }
 
 module.exports = { openStore, validateState };

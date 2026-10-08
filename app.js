@@ -75,7 +75,8 @@ const iconPaths = {
   reset: '<path d="M3 11a9 9 0 1 1 2 6M3 4v7h7"/>',
   info: '<circle cx="12" cy="12" r="10"/><path d="M12 11v6M12 7h.01"/>',
   receipt: '<path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6M9 15h4"/>',
-  image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>'
+  image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>',
+  file: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>'
 };
 
 function icon(name, size) {
@@ -567,7 +568,7 @@ function transactionRow(item, compact) {
   const category = categoryById(item.categoryId);
   return '<button class="transaction-row' + (compact ? ' is-compact' : '') + '" type="button" data-edit-transaction="' + escapeHtml(item.id) + '">' +
     categoryIcon(category) +
-    '<span class="transaction-detail"><strong>' + escapeHtml(item.title) + (item.receiptId ? '<span class="receipt-mark" title="Tiene boleta" aria-label="Tiene boleta">' + icon('receipt', 13) + '</span>' : '') + '</strong><small>' + (item.note ? escapeHtml(item.note) + ' <span class="detail-separator">·</span> ' : '') + escapeHtml(category ? category.name : 'Sin categoría') + ' <span class="detail-separator">·</span> ' + prettyDate(item.date) + (isSavingsEntry(item) && savingsCurrency(item) !== 'CLP' ? ' <span class="detail-separator">·</span> ' + escapeHtml(formatSavings(savingsCurrency(item), savingsUnits(item))) + ' ahorrados' : '') + '</small></span>' +
+    '<span class="transaction-detail"><strong>' + escapeHtml(item.title) + (item.receiptId ? '<span class="receipt-mark" title="Tiene boleta" aria-label="Tiene boleta">' + icon('receipt', 13) + '</span>' : '') + (item.documentId ? '<span class="receipt-mark" title="Tiene documento" aria-label="Tiene documento">' + icon('file', 13) + '</span>' : '') + '</strong><small>' + (item.note ? escapeHtml(item.note) + ' <span class="detail-separator">·</span> ' : '') + escapeHtml(category ? category.name : 'Sin categoría') + ' <span class="detail-separator">·</span> ' + prettyDate(item.date) + (isSavingsEntry(item) && savingsCurrency(item) !== 'CLP' ? ' <span class="detail-separator">·</span> ' + escapeHtml(formatSavings(savingsCurrency(item), savingsUnits(item))) + ' ahorrados' : '') + '</small></span>' +
     '<span class="transaction-amount ' + item.kind + '">' + (item.kind === 'income' ? '+ ' : '- ') + money(item.amount) + '</span>' +
     icon('arrowRight', 17) + '</button>';
 }
@@ -858,6 +859,7 @@ function transactionModal() {
       return { value: category.id, label: category.name, leading: '<span class="dropdown-symbol ' + toneClass(category.tone) + '"' + toneStyle(category.tone) + '>' + icon(category.icon, 16) + '</span>' };
     }), 'form-dropdown') + '</div><div>' + datePicker(date) + '</div></div>' +
     '<span class="field-label" id="receipt-label">Boleta o captura <span class="field-optional">(opcional)</span></span><div class="receipt-field" data-receipt-field>' + receiptFieldMarkup() + '</div>' +
+    '<span class="field-label">Factura o documento <span class="field-optional">(opcional)</span></span><div class="receipt-field" data-document-field>' + documentFieldMarkup() + '</div>' +
     '<div class="dialog-actions">' + (item ? '<button class="button button-danger" type="button" data-action="delete-transaction">' + icon('trash', 17) + '<span>Eliminar</span></button>' : '') +
       '<button class="button button-primary" type="submit">' + (item ? 'Guardar cambios' : kind === 'income' ? 'Guardar ingreso' : 'Guardar gasto') + '</button></div></form></div>';
 }
@@ -881,6 +883,49 @@ function receiptFieldMarkup() {
   }
   return '<div class="receipt-preview"><button class="receipt-thumb" type="button" data-action="view-receipt" aria-label="Ver boleta"><img src="' + escapeHtml(receiptSrc(modal.receiptId)) + '" alt="Boleta adjunta" data-receipt-image /></button>' +
     '<div class="receipt-actions"><button class="text-button" type="button" data-action="view-receipt">' + icon('eye', 15) + ' Ver</button><label class="text-button" for="receipt-file">' + icon('image', 15) + ' Cambiar</label><button class="text-button receipt-remove" type="button" data-action="remove-receipt">' + icon('trash', 15) + ' Quitar</button></div></div>' + picker;
+}
+
+// Documentos: PDF, planillas o XML de la factura. Se descargan o se abren con el programa del equipo.
+const DOCUMENT_EXTENSIONS = ['pdf', 'xlsx', 'xls', 'ods', 'csv', 'docx', 'doc', 'odt', 'xml', 'txt'];
+const DOCUMENT_DEMO_KEY = 'miplata-prototype-documents';
+
+function documentHref(id, name) {
+  if (!LIVE) { try { return (JSON.parse(localStorage.getItem(DOCUMENT_DEMO_KEY)) || {})[id] || '#'; } catch (error) { return '#'; } }
+  return '/api/documents/' + encodeURIComponent(id) + '?name=' + encodeURIComponent(name);
+}
+
+function documentFieldMarkup() {
+  if (modal.documentUploading) return '<div class="receipt-empty is-busy">' + icon('file', 20) + '<span>Subiendo el archivo...</span></div>';
+  const picker = '<input id="document-file" type="file" accept="' + DOCUMENT_EXTENSIONS.map(function (extension) { return '.' + extension; }).join(',') + '" hidden />';
+  if (!modal.documentId) {
+    return '<label class="receipt-empty" for="document-file">' + icon('file', 20) + '<span><strong>Adjuntar archivo</strong><small>PDF, Excel, Word, CSV o XML, hasta 15 MB.</small></span></label>' + picker;
+  }
+  return '<div class="document-preview"><span class="document-icon">' + icon('file', 20) + '</span><span class="document-name" title="' + escapeHtml(modal.documentName) + '">' + escapeHtml(modal.documentName) + '</span></div>' +
+    '<div class="receipt-actions document-actions"><a class="text-button" href="' + escapeHtml(documentHref(modal.documentId, modal.documentName)) + '" download="' + escapeHtml(modal.documentName) + '">' + icon('download', 15) + ' Abrir</a><label class="text-button" for="document-file">' + icon('file', 15) + ' Cambiar</label><button class="text-button receipt-remove" type="button" data-action="remove-document">' + icon('trash', 15) + ' Quitar</button></div>' + picker;
+}
+
+function refreshDocumentField() {
+  const field = document.querySelector('[data-document-field]');
+  if (field && modal && modal.type === 'transaction') field.innerHTML = documentFieldMarkup();
+}
+
+async function storeDocument(file) {
+  const extension = (file.name.match(/\.([a-z0-9]+)$/i) || [])[1];
+  if (!extension || !DOCUMENT_EXTENSIONS.includes(extension.toLowerCase())) throw new Error('Sube un PDF, Excel, Word, CSV, XML o TXT');
+  if (file.size > 15000000) throw new Error('El archivo supera los 15 MB');
+  if (!LIVE) {
+    if (file.size > 1500000) throw new Error('En la demostración el archivo debe pesar menos de 1,5 MB');
+    const id = 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12).padEnd(10, '0');
+    let documents = {};
+    try { documents = JSON.parse(localStorage.getItem(DOCUMENT_DEMO_KEY)) || {}; } catch (error) { documents = {}; }
+    documents[id] = await readFileAsDataUrl(file);
+    try { localStorage.setItem(DOCUMENT_DEMO_KEY, JSON.stringify(documents)); } catch (error) { throw new Error('No queda espacio en este navegador para el archivo'); }
+    return { id: id, name: file.name };
+  }
+  const response = await fetch('/api/documents?name=' + encodeURIComponent(file.name), { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: file });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || 'No se pudo guardar el archivo');
+  return result;
 }
 
 function refreshReceiptField() {
@@ -1133,7 +1178,7 @@ function moveCategory(id, direction) {
 
 function openTransaction(kind, id, categoryId) {
   const item = id ? data.transactions.find(function (entry) { return entry.id === id; }) : null;
-  modal = { type: 'transaction', kind: item ? item.kind : kind, id: id || null, categoryId: categoryId || null, receiptId: item && item.receiptId || null };
+  modal = { type: 'transaction', kind: item ? item.kind : kind, id: id || null, categoryId: categoryId || null, receiptId: item && item.receiptId || null, documentId: item && item.documentId || null, documentName: item && item.documentName || null };
   render();
   const amount = document.getElementById('amount');
   if (amount && !id) amount.focus();
@@ -1422,6 +1467,7 @@ document.addEventListener('click', function (event) {
     case 'clear-filters': rangeFrom = ''; rangeTo = ''; amountMin = ''; amountMax = ''; render(); break;
     case 'view-receipt': if (modal && modal.receiptId) openReceiptViewer(modal.receiptId); break;
     case 'close-receipt-viewer': closeReceiptViewer(); break;
+    case 'remove-document': if (modal && modal.type === 'transaction') { modal.documentId = null; modal.documentName = null; refreshDocumentField(); } break;
     case 'remove-receipt': if (modal && modal.type === 'transaction') { modal.receiptId = null; refreshReceiptField(); } break;
     case 'cancel-confirm': modal = modal && modal.returnTo ? modal.returnTo : null; render(); break;
     case 'simulate-request': pairingStep = 'desktop-pending'; render(); break;
@@ -1538,6 +1584,22 @@ document.addEventListener('change', async function (event) {
     if (modal === current) refreshReceiptField();
     return;
   }
+  if (event.target.id === 'document-file') {
+    const file = event.target.files && event.target.files[0];
+    if (!file || !modal || modal.type !== 'transaction') return;
+    const current = modal;
+    current.documentUploading = true;
+    refreshDocumentField();
+    try {
+      const saved = await storeDocument(file);
+      current.documentId = saved.id;
+      current.documentName = saved.name;
+      toast('Archivo adjuntado');
+    } catch (error) { toast(error.message); }
+    current.documentUploading = false;
+    if (modal === current) refreshDocumentField();
+    return;
+  }
   if (event.target.id !== 'restore-file' || !LIVE || !DESKTOP) return;
   const file = event.target.files && event.target.files[0];
   if (!file) return;
@@ -1588,8 +1650,9 @@ document.addEventListener('submit', function (event) {
     const entry = { id: modal.id || 't' + Date.now(), kind: modal.kind, amount: amount, title: title, date: date, categoryId: categoryId };
     if (previous?.createdAt || !previous) entry.createdAt = previous?.createdAt || new Date().toISOString();
     if (note) entry.note = note;
-    if (modal.receiptUploading) { toast('Espera a que termine de cargar la boleta'); return; }
+    if (modal.receiptUploading || modal.documentUploading) { toast('Espera a que termine de cargar el archivo'); return; }
     if (modal.receiptId) entry.receiptId = modal.receiptId;
+    if (modal.documentId) { entry.documentId = modal.documentId; entry.documentName = modal.documentName; }
     if (isSavingsEntry(entry)) {
       entry.savingsCurrency = previous && isSavingsEntry(previous) ? savingsCurrency(previous) : 'CLP';
       entry.savingsAmount = previous && isSavingsEntry(previous) ? savingsUnits(previous) : amount;
@@ -1620,6 +1683,7 @@ document.addEventListener('submit', function (event) {
     if (previous?.createdAt || !previous) entry.createdAt = previous?.createdAt || new Date().toISOString();
     if (previous && previous.note) entry.note = previous.note;
     if (previous && previous.receiptId) entry.receiptId = previous.receiptId;
+    if (previous && previous.documentId) { entry.documentId = previous.documentId; entry.documentName = previous.documentName; }
     const remaining = data.transactions.filter(function (item) { return item.id !== entry.id; });
     if (!savingsBalancesValid(remaining.concat(entry))) {
       toast('El retiro no puede superar el ahorro en esa moneda'); return;
