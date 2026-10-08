@@ -35,7 +35,7 @@ MiPlata usa el mismo puerto (`4174`) que MisGastos, así que no pueden estar abi
 
 ## Capturas
 
-Las capturas son del proyecto original MisGastos y usan **datos ficticios** de la vista de demostración. Tus datos reales empiezan vacíos.
+Las capturas usan **datos ficticios** de la vista de demostración. Tus datos reales empiezan vacíos.
 
 ### Escritorio
 
