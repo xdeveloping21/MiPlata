@@ -12,6 +12,7 @@ MiPlata es una aplicación de escritorio para Windows. Guarda los datos en SQLit
 
 MiPlata es un fork de [MisGastos](https://github.com/ValentinTarnovsky/MisGastos), creado por Valentin Tarnovsky y publicado con licencia MIT. Se basa en MisGastos 0.2.8 y cambia lo siguiente:
 
+- Logo propio: un signo $ verde con estrella, montañas y araucaria (fuente en `assets/miplata-logo.svg`).
 - Textos en español neutro (tú) en la app, la vinculación del iPhone y el bot de Discord.
 - Moneda principal en pesos chilenos (CLP), con formato `es-CL` y fecha del bot en hora de Chile (`America/Santiago`).
 - Los campos de monto muestran el punto de miles mientras escribes (10.000, 1.000.000).

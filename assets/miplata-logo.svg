@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2f9468"/><stop offset="1" stop-color="#14472f"/></linearGradient>
+    <linearGradient id="gold" gradientUnits="userSpaceOnUse" x1="300" y1="200" x2="720" y2="860"><stop offset="0" stop-color="#f6df98"/><stop offset="1" stop-color="#c39338"/></linearGradient>
+    <linearGradient id="ribbon" gradientUnits="userSpaceOnUse" x1="300" y1="200" x2="720" y2="860"><stop offset="0" stop-color="#8fe0ad"/><stop offset="1" stop-color="#3fa872"/></linearGradient>
+    <clipPath id="sq"><rect x="80" y="80" width="864" height="864" rx="210"/></clipPath>
+  </defs>
+  <rect x="80" y="80" width="864" height="864" rx="210" fill="url(#bg)"/>
+  <g clip-path="url(#sq)">
+    <path d="M80 760 L230 600 L300 650 L420 520 L520 640 L640 540 L760 660 L840 590 L944 690 V944 H80 Z" fill="#6fc495" opacity="0.28"/>
+    <path d="M80 830 Q300 760 520 820 T944 800 V944 H80 Z" fill="#0f3a26" opacity="0.55"/>
+    <g fill="#0f3a26" opacity="0.85">
+      <rect x="812" y="640" width="16" height="230" rx="6"/>
+      <path d="M735 668 Q820 580 905 668 Q890 656 876 670 Q862 656 848 670 Q834 656 820 670 Q806 656 792 670 Q778 656 764 670 Q750 656 735 668 Z"/>
+      <path d="M765 720 Q820 668 875 720 Q863 710 851 722 Q838 710 826 722 Q814 710 802 722 Q790 710 777 722 Q770 714 765 720 Z"/>
+    </g>
+  </g>
+  <g stroke-linecap="round" fill="none">
+    <path d="M655 395 C630 335 565 312 505 315 C425 320 372 365 380 430 C392 520 650 505 660 612 C667 690 595 728 515 726 C440 724 388 695 362 638" stroke="url(#gold)" stroke-width="150"/>
+    <path d="M655 395 C630 335 565 312 505 315 C425 320 372 365 380 430 C392 520 650 505 660 612 C667 690 595 728 515 726 C440 724 388 695 362 638" stroke="url(#ribbon)" stroke-width="112"/>
+    <path d="M512 222 V818" stroke="url(#gold)" stroke-width="96"/>
+    <path d="M512 222 V818" stroke="url(#ribbon)" stroke-width="62"/>
+  </g>
+  <g fill="none" stroke="#2a8a5b" stroke-width="10" opacity="0.9">
+    <path d="M430 375 l26 26 -26 26 -26 -26 Z"/>
+    
+    <path d="M600 615 l26 26 -26 26 -26 -26 Z"/>
+  </g>
+  <path transform="translate(770 245)" d="M0 -58 L16 -19 58 -18 25 9 36 49 0 26 -36 49 -25 9 -58 -18 -16 -19 Z" fill="url(#gold)"/>
+</svg>
