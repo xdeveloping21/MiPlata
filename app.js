@@ -58,6 +58,8 @@ const iconPaths = {
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   phone: '<rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/>',
   calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18"/>',
+  share: '<path d="M12 15V3M8 7l4-4 4 4"/><path d="M8 11H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-2"/>',
+  addSquare: '<rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/>',
   logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
   user: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
   qr: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h2v2h-2zM20 14v3h-3M14 20h3M20 20h1"/>',
@@ -708,6 +710,25 @@ function recurringModal() {
     '<div class="dialog-actions"><button class="button button-primary" type="submit">' + icon('plus', 17) + ' Agregar pago fijo</button></div></form>');
 }
 
+// En iPhone no se puede agregar la app al inicio desde la página: solo mostramos cómo hacerlo en Safari.
+const INSTALL_HINT_KEY = 'miplata-install-hint-closed';
+const IOS_DEVICE = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+function installedAsApp() {
+  return window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+}
+let installHintHidden = false;
+function installHintClosed() {
+  if (installHintHidden) return true;
+  try { return localStorage.getItem(INSTALL_HINT_KEY) === '1'; } catch (error) { return false; }
+}
+function installHint() {
+  if (!LIVE || !IOS_DEVICE || installedAsApp() || installHintClosed()) return '';
+  return '<aside class="install-hint" aria-label="Agregar MiPlata al inicio"><img src="apple-touch-icon.png" alt="" width="42" height="42" />' +
+    '<div><strong>Agrega MiPlata a tu inicio</strong><p>Así la abres como una app, a pantalla completa.</p>' +
+    '<ol><li>Toca ' + icon('share', 15) + ' <b>Compartir</b> (si no lo ves, toca primero <b>•••</b>).</li><li>Elige ' + icon('addSquare', 15) + ' <b>Agregar a pantalla de inicio</b>.</li><li>Toca <b>Agregar</b>.</li></ol></div>' +
+    '<button class="icon-button" data-action="close-install-hint" type="button" aria-label="Cerrar aviso">' + icon('close', 17) + '</button></aside>';
+}
+
 function shell(content) {
   const themeIcon = data.theme === 'light' ? 'moon' : 'sun';
   return (LIVE ? '' : '<div class="prototype-ribbon"><span class="prototype-dot"></span> PROTOTIPO DE DISEÑO <span class="ribbon-separator">|</span> Datos ficticios</div>') +
@@ -722,7 +743,7 @@ function shell(content) {
       '<nav class="mobile-nav" aria-label="Principal">' +
         navItem('home', 'Inicio', 'home') + navItem('transactions', 'Movimientos', 'list') + navItem('categories', 'Categorías', 'categories') + navItem('savings', 'Ahorros', 'savings') + navItem('settings', 'Ajustes', 'settings') +
       '</nav>' +
-    '</div>' + (modal ? renderModal() : '');
+    '</div>' + installHint() + (modal ? renderModal() : '');
 }
 
 function pageHeader(eyebrow, title, subtitle, actions, className) {
@@ -1338,8 +1359,8 @@ function qrModal() {
     return '<div class="modal-backdrop" data-action="close-modal"></div><div class="dialog qr-dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">' +
       '<div class="dialog-head"><div><p class="eyebrow">ACCESO MÓVIL</p><h2 id="dialog-title">' + (request ? 'Solicitud de acceso' : person ? 'Conectar celular de ' + escapeHtml(person.name) : 'Conectar iPhone') + '</h2></div><button class="icon-button" data-action="close-modal" type="button" aria-label="Cerrar">' + icon('close', 20) + '</button></div>' +
       (request ? '<div class="approval-icon">' + icon('phone', 30) + '</div><p class="qr-intro">' + (request.personName ? '<strong>' + escapeHtml(request.name) + '</strong> solicita acceso a los gastos de <strong>' + escapeHtml(request.personName) + '</strong>. Permite el acceso solo si es el celular de esa persona.' : '<strong>' + escapeHtml(request.name) + '</strong> solicita acceso a tus gastos. Permite el acceso solo si es tu celular.') + '</p><div class="approval-actions"><button class="button button-outline" data-pair-decision="deny" data-request-id="' + escapeHtml(request.id) + '" type="button">Rechazar</button><button class="button button-primary" data-pair-decision="approve" data-request-id="' + escapeHtml(request.id) + '" type="button">Permitir acceso</button></div>' :
-      '<p class="qr-intro">' + (person ? 'Pídele a ' + escapeHtml(person.name) + ' que escanee este QR con su celular. Verá solo sus propios gastos.' : 'Elige la conexión, escanea el QR con Safari y aprueba la solicitud en esta PC.') + '</p><div class="network-options">' + (networks || '<p>Conecta la PC a Wi-Fi o Tailscale para generar el QR.</p>') + '</div>' +
-      (pairingInfo ? '<div class="qr-wrap"><img class="real-qr" src="' + pairingInfo.qr + '" alt="QR para vincular el iPhone" /></div><p class="pair-url">' + escapeHtml(pairingInfo.url) + '</p><p class="qr-disclaimer">Este QR vence en 5 minutos. Fuera de casa, usa Tailscale en la PC y el iPhone.</p>' : '<p class="qr-disclaimer">Preparando QR...</p>')) + '</div>';
+      '<p class="qr-intro">' + (person ? 'Pídele a ' + escapeHtml(person.name) + ' que escanee este QR con su celular. Verá solo sus propios gastos.' : (desktopInfo.networks.length > 1 ? 'Elige la conexión, escanea el QR con Safari y aprueba la solicitud en esta PC.' : 'Escanea el QR con Safari y aprueba la solicitud en esta PC.')) + '</p><div class="network-options">' + (networks || '<p>Conecta la PC a Wi-Fi o Tailscale para generar el QR.</p>') + '</div>' +
+      (pairingInfo ? '<div class="qr-wrap"><img class="real-qr" src="' + pairingInfo.qr + '" alt="QR para vincular el iPhone" /></div><p class="pair-url">' + escapeHtml(pairingInfo.url) + '</p><p class="qr-disclaimer">Este QR vence en 5 minutos.' + (pairingInfo.url.indexOf('https://') === 0 ? '' : ' Fuera de casa, usa Tailscale en la PC y el iPhone.') + '</p>' : '<p class="qr-disclaimer">Preparando QR...</p>')) + '</div>';
   }
   const pending = pairingStep === 'desktop-pending';
   return '<div class="modal-backdrop" data-action="close-modal"></div><div class="dialog qr-dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">' +
@@ -1779,6 +1800,11 @@ document.addEventListener('click', function (event) {
       break;
     case 'logout':
       if (LIVE && !DESKTOP) { modal = { type: 'confirmation', action: 'logout' }; render(); }
+      break;
+    case 'close-install-hint':
+      installHintHidden = true;
+      try { localStorage.setItem(INSTALL_HINT_KEY, '1'); } catch (error) { /* sin almacenamiento, se oculta hasta recargar */ }
+      document.querySelector('.install-hint')?.remove();
       break;
     case 'add-person': if (LIVE && DESKTOP) { modal = { type: 'person' }; render(); document.getElementById('person-name')?.focus(); } break;
     case 'show-qr':
