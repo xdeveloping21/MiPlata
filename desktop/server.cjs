@@ -145,6 +145,13 @@ function startServer(store, root, onPending, options = {}) {
   const adminUnlocked = new Map();
   const ADMIN_UNLOCK_MS = 10 * 60 * 1000;
 
+  // Dónde se conectó cada dispositivo por última vez: país (si hay base de países), Tailscale o red local.
+  function describeDevice(item) {
+    const address = String(item.lastIp || '').replace(/^::ffff:/i, '');
+    const local = /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|127\.|::1$|f[cd][0-9a-f]{2}:|fe80:)/i.test(address);
+    return { ...item, network: !address ? null : isTailscaleAddress(address) ? 'tailscale' : local ? 'local' : 'internet', country: address && options.geo ? options.geo.lookup(address) : null };
+  }
+
   function startSession(res, personId, deviceName, secure) {
     const token = crypto.randomBytes(32).toString('base64url');
     store.addDevice(DEVICE_NAMES.includes(deviceName) ? deviceName : 'Navegador', token, personId);
@@ -167,6 +174,9 @@ function startServer(store, root, onPending, options = {}) {
       if (proxied && requestHost !== publicHost) return json(res, 403, { error: 'Dirección no permitida' });
       const cookie = (req.headers.cookie || '').split(';').map((part) => part.trim()).find((part) => part.startsWith('mg_session='));
       const device = cookie ? store.deviceForToken(cookie.slice('mg_session='.length)) : null;
+      // Por Caddy, la IP real del visitante llega en X-MiPlata-Client (Caddy reemplaza lo que mande el navegador).
+      const clientAddress = proxied ? String(req.headers['x-miplata-client'] || '') : String(req.socket.remoteAddress || '');
+      if (device) store.touchDevice(device.id, clientAddress);
       const authorized = isLocal || Boolean(device);
       // La PC (o el túnel SSH) usa los datos del dueño; cada dispositivo, los de la persona a la que se vinculó.
       const personId = isLocal ? 'owner' : device?.person_id || 'owner';
@@ -316,7 +326,7 @@ function startServer(store, root, onPending, options = {}) {
         try { store.deleteAccount(String(body.personId || '')); } catch (error) { return json(res, 404, { error: error.message }); }
         return json(res, 200, { ok: true });
       }
-      if (pathname === '/api/desktop-info' && req.method === 'GET') return json(res, 200, { networks: networks(), devices: store.listDevices(), people: store.listPeople(), ownerAccount: store.accountFor('owner')?.username || null, pending: [...pending.entries()].filter(([, item]) => item.status === 'pending' && Date.now() - item.createdAt < 300000).map(([id, item]) => ({ id, name: item.name, personId: item.personId, personName: store.personName(item.personId) })), backupDir: store.backupDir, lastBackup: store.lastBackupAt() });
+      if (pathname === '/api/desktop-info' && req.method === 'GET') return json(res, 200, { networks: networks(), devices: store.listDevices().map(describeDevice), people: store.listPeople(), ownerAccount: store.accountFor('owner')?.username || null, pending: [...pending.entries()].filter(([, item]) => item.status === 'pending' && Date.now() - item.createdAt < 300000).map(([id, item]) => ({ id, name: item.name, personId: item.personId, personName: store.personName(item.personId) })), backupDir: store.backupDir, lastBackup: store.lastBackupAt() });
       if (pathname === '/api/invites' && req.method === 'POST') {
         const body = await readBody(req);
         try { return json(res, 200, store.createInvite(String(body.personId || ''))); } catch (error) { return json(res, 400, { error: error.message }); }

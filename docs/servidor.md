@@ -125,6 +125,8 @@ Con tu usuario también administras desde cualquier lugar, sin el túnel: al ent
 
 Si alguien olvida su contraseña, presiona **Cambiar contraseña** junto a su nombre y escribe una nueva. Después de 5 intentos fallidos, MiPlata bloquea los intentos durante 15 minutos.
 
+Bajo cada persona ves sus dispositivos, con la última conexión de cada uno: país, dirección IP y hace cuánto entró. El país sale de la base gratuita [DB-IP Lite](https://db-ip.com), que el servidor descarga una vez al mes en `/var/lib/miplata/geo`; las IP no se envían a ningún servicio. Es aproximado: con VPN o el Relay privado de iCloud aparece el país de ese servicio. Para no descargar la base, agrega `Environment=MIPLATA_PAISES=0` al servicio.
+
 El QR (**Conectar con QR**) sigue disponible como alternativa. Si eliminas a una persona, se borran sus gastos, boletas y documentos, y sus dispositivos pierden el acceso.
 
 ## 9. Publicar con tu dominio (sin Tailscale)

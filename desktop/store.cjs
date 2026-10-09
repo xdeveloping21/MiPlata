@@ -590,8 +590,31 @@ async function openStore(userDataPath, initialStatePath) {
     return one('SELECT id, name, created_at, person_id FROM devices WHERE token_hash = ?', [hash]);
   }
 
+  // Última conexión de cada dispositivo (IP y hora). Vive en memoria y se guarda aparte, a lo más cada 5 minutos,
+  // para no reescribir la base de datos ni las copias en cada visita.
+  const activityPath = path.join(userDataPath, 'device-activity.json');
+  let activity = {};
+  try { activity = JSON.parse(fs.readFileSync(activityPath, 'utf8')) || {}; } catch (error) { activity = {}; }
+  let activityWrittenAt = 0;
+
+  function writeActivity() {
+    const known = new Set(all('SELECT id FROM devices').map((row) => row[0]));
+    for (const id of Object.keys(activity)) if (!known.has(id)) delete activity[id];
+    const temporary = activityPath + '.tmp';
+    fs.writeFileSync(temporary, JSON.stringify(activity));
+    fs.renameSync(temporary, activityPath);
+    activityWrittenAt = Date.now();
+  }
+
+  function touchDevice(id, ip) {
+    const previous = activity[id];
+    const address = String(ip || '').replace(/^::ffff:/i, '').slice(0, 64);
+    activity[id] = { ip: address, seenAt: new Date().toISOString() };
+    if (!previous || previous.ip !== address || Date.now() - activityWrittenAt > 5 * 60 * 1000) writeActivity();
+  }
+
   function listDevices() {
-    return all('SELECT id, name, created_at, person_id FROM devices ORDER BY created_at DESC').map((row) => ({ id: row[0], name: row[1], createdAt: row[2], personId: row[3] }));
+    return all('SELECT id, name, created_at, person_id FROM devices ORDER BY created_at DESC').map((row) => ({ id: row[0], name: row[1], createdAt: row[2], personId: row[3], lastIp: activity[row[0]]?.ip || null, lastSeen: activity[row[0]]?.seenAt || null }));
   }
 
   function revokeDevice(id) {
@@ -599,7 +622,7 @@ async function openStore(userDataPath, initialStatePath) {
     persist();
   }
 
-  return { ...ownerScope, forPerson: scope, listPeople, addPerson, removePerson, personName, accountFor, createInvite, registerAccount, verifyLogin, setPassword, setUsername, deleteAccount, addDevice, deviceForToken, listDevices, revokeDevice, lastBackupAt, backupDir, dbPath, backupNow, close: () => db.close() };
+  return { ...ownerScope, forPerson: scope, listPeople, addPerson, removePerson, personName, accountFor, createInvite, registerAccount, verifyLogin, setPassword, setUsername, deleteAccount, addDevice, deviceForToken, touchDevice, listDevices, revokeDevice, lastBackupAt, backupDir, dbPath, backupNow, close: () => { if (Object.keys(activity).length) writeActivity(); db.close(); } };
 }
 
 module.exports = { openStore, validateState, OWNER };

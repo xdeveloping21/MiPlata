@@ -4,6 +4,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { openStore } = require('./store.cjs');
 const { startServer, PORT } = require('./server.cjs');
+const { openGeo } = require('./geo.cjs');
 
 const root = path.resolve(__dirname, '..');
 const dataDir = path.resolve(process.env.MIPLATA_DATA || process.argv[2] || path.join(os.homedir(), '.miplata'));
@@ -14,10 +15,12 @@ const publicHost = /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(process.env.MIPLATA_DOMINIO 
 
 (async () => {
   const store = await openStore(dataDir, path.join(root, 'initial-state.json'));
-  const { server } = await startServer(store, root, () => console.log('Hay una solicitud para vincular un dispositivo. Apruébala desde MiPlata abierto en tu PC.'), { onlyTailscale, publicHost });
+  // País de cada conexión en Ajustes; MIPLATA_PAISES=0 lo desactiva (no descarga la base).
+  const geo = process.env.MIPLATA_PAISES === '0' ? null : openGeo(path.join(dataDir, 'geo'));
+  const { server } = await startServer(store, root, () => console.log('Hay una solicitud para vincular un dispositivo. Apruébala desde MiPlata abierto en tu PC.'), { onlyTailscale, publicHost, geo });
   console.log('MiPlata en modo servidor, puerto ' + PORT + ', datos en ' + dataDir + (onlyTailscale ? ', solo red Tailscale' : '') + (publicHost ? ', publicada en https://' + publicHost : ''));
   const stop = () => {
-    server.close(() => { store.close(); process.exit(0); });
+    server.close(() => { geo?.close(); store.close(); process.exit(0); });
     setTimeout(() => process.exit(0), 3000).unref();
   };
   process.on('SIGTERM', stop);

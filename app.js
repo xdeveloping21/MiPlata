@@ -1049,10 +1049,36 @@ function renderCategoryDetail() {
     '<section class="panel category-history"><div class="panel-heading"><div><p class="section-eyebrow">HISTORIAL</p><h2>' + (selectedGroup ? escapeHtml(selectedGroup.title) : 'Movimientos del mes') + '</h2></div>' + (selectedGroup ? '<button class="text-button" data-concept-filter="" type="button">Ver todos</button>' : '<span class="panel-period">' + items.length + (items.length === 1 ? ' movimiento' : ' movimientos') + '</span>') + '</div><div class="transaction-list">' + (shownItems.length ? shownItems.map(function (item) { return transactionRow(item, false); }).join('') : '<div class="empty-state">No hay movimientos en este período.</div>') + '</div></section></div>';
 }
 
+// "Chile · 190.22.10.5 · hace 5 min": desde dónde se conectó el dispositivo por última vez.
+const regionNames = (function () { try { return new Intl.DisplayNames(['es'], { type: 'region' }); } catch (error) { return null; } })();
+function countryLabel(code) {
+  if (!code) return '';
+  const flag = String.fromCodePoint.apply(null, code.toUpperCase().split('').map(function (letter) { return 127397 + letter.charCodeAt(0); }));
+  let name = code;
+  try { name = (regionNames && regionNames.of(code)) || code; } catch (error) { name = code; }
+  return flag + ' ' + name;
+}
+function timeAgo(iso) {
+  const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (!(minutes >= 0)) return '';
+  if (minutes < 2) return 'ahora';
+  if (minutes < 60) return 'hace ' + minutes + ' min';
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return 'hace ' + hours + (hours === 1 ? ' hora' : ' horas');
+  const days = Math.round(hours / 24);
+  return 'hace ' + days + (days === 1 ? ' día' : ' días');
+}
+function deviceWhere(device) {
+  if (!device.lastSeen) return 'Aún sin datos de conexión';
+  const place = device.network === 'tailscale' ? 'Tailscale' : device.network === 'local' ? 'Red local' : device.country ? countryLabel(device.country) : 'País desconocido';
+  return [escapeHtml(place), device.lastIp ? escapeHtml(device.lastIp) : '', timeAgo(device.lastSeen)].filter(Boolean).join(' · ');
+}
+
 function renderSettings() {
   if (LIVE) {
     const deviceRow = function (device) {
-      return '<div class="linked-device"><span>' + icon('phone', 19) + '<strong>' + escapeHtml(device.name) + '</strong></span><button class="text-button" data-revoke-device="' + escapeHtml(device.id) + '" type="button">Revocar</button></div>';
+      const where = deviceWhere(device);
+      return '<div class="linked-device"><span>' + icon('phone', 19) + '<span class="device-text"><strong>' + escapeHtml(device.name) + '</strong>' + (where ? '<small>' + where + '</small>' : '') + '</span></span><button class="text-button" data-revoke-device="' + escapeHtml(device.id) + '" type="button">Revocar</button></div>';
     };
     const devices = ownerDevices().map(deviceRow).join('');
     const accountButton = function (id, username) {
@@ -1084,7 +1110,8 @@ function renderSettings() {
         '<p class="settings-note">Copias automáticas en ' + escapeHtml(desktopInfo.backupDir || 'la carpeta de datos de MiPlata') + '</p></section>' : '') +
       (ADMIN ? '<section class="panel settings-panel people-panel"><div class="settings-heading"><span class="settings-icon">' + icon('user', 20) + '</span><div><h2>Personas y cuentas</h2><p>Cada persona entra con su usuario y ve solo sus propios gastos.</p></div></div>' + (DESKTOP ? '' : '<p class="settings-note">Como estás fuera de la PC, te pediremos tu contraseña antes de hacer cambios.</p>') + people +
         ((desktopInfo.people || []).length ? '' : '<p class="settings-note">Agrega a alguien de tu familia o a un amigo para que lleve sus gastos aquí, sin ver los tuyos.</p>') +
-        '<button class="setting-action" data-action="add-person" type="button"><span>' + icon('plus', 18) + ' Agregar persona</span>' + icon('arrowRight', 18) + '</button></section>' : '') + '</div>';
+        '<button class="setting-action" data-action="add-person" type="button"><span>' + icon('plus', 18) + ' Agregar persona</span>' + icon('arrowRight', 18) + '</button>' +
+        (desktopInfo.devices.some(function (device) { return device.country; }) ? '<p class="settings-note geo-credit">Países según <a href="https://db-ip.com" target="_blank" rel="noopener">IP Geolocation by DB-IP</a>. Son aproximados.</p>' : '') + '</section>' : '') + '</div>';
   }
   return pageHeader('PREFERENCIAS', 'Ajustes', 'Personaliza esta vista previa y prueba el enlace con tu iPhone.', '') +
     '<div class="settings-grid"><section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('sun', 20) + '</span><div><h2>Apariencia</h2><p>Elige cómo quieres ver MiPlata.</p></div></div>' +
