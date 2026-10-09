@@ -121,6 +121,8 @@ Cada persona tiene sus propios gastos, categorías, ahorros, boletas y documento
 
 Tú también puedes crear tu usuario: en la fila **Tú**, presiona **Crear invitación** y úsala en tu iPhone. Así no necesitas el QR.
 
+Con tu usuario también administras desde cualquier lugar, sin el túnel: al entrar con él, en **Ajustes** aparece **Personas y cuentas**. Antes del primer cambio, MiPlata te pide de nuevo tu contraseña, y no vuelve a pedirla en ese dispositivo durante 10 minutos. Exportar y restaurar copias de seguridad sigue haciéndose solo desde la PC, con el túnel.
+
 Si alguien olvida su contraseña, presiona **Cambiar contraseña** junto a su nombre y escribe una nueva. Después de 5 intentos fallidos, MiPlata bloquea los intentos durante 15 minutos.
 
 El QR (**Conectar con QR**) sigue disponible como alternativa. Si eliminas a una persona, se borran sus gastos, boletas y documentos, y sus dispositivos pierden el acceso.

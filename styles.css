@@ -799,6 +799,7 @@ button.breakdown-detail-row:hover, button.breakdown-detail-row:focus-visible { b
 .approval-actions { display: flex; gap: 10px; margin-top: 22px; }
 .approval-actions .button { flex: 1; }
 .install-hint { position: fixed; z-index: 30; right: 24px; bottom: 24px; display: flex; align-items: flex-start; gap: 12px; width: min(380px, calc(100vw - 24px)); padding: 14px 10px 14px 14px; border: 1px solid var(--border); border-radius: 18px; background: var(--surface-raised); box-shadow: 0 18px 50px rgba(8, 20, 14, .18); color: var(--text); }
+.main-content.with-install-hint { padding-bottom: 260px; }
 .install-hint > img { flex: none; width: 42px; height: 42px; border-radius: 10px; }
 .install-hint > div { flex: 1; min-width: 0; }
 .install-hint strong { display: block; font-size: 14px; }
@@ -991,6 +992,7 @@ button.breakdown-detail-row:hover, button.breakdown-detail-row:focus-visible { b
   .qr-dialog { width: 100%; }
   .qr-art { grid-template-columns: repeat(25, 5px); grid-template-rows: repeat(25, 5px); }
   .toast { bottom: calc(79px + env(safe-area-inset-bottom)); }
+  .main-content.with-install-hint { padding-bottom: calc(330px + env(safe-area-inset-bottom)); }
   .install-hint { left: 12px; right: 12px; bottom: calc(79px + env(safe-area-inset-bottom)); width: auto; }
 }
 

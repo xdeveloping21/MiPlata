@@ -3,6 +3,8 @@ const SAMPLE_MONTH = '2026-09';
 const QR_CODE = 'A7F3K9M2';
 const LIVE = Boolean(window.MISGASTOS_LIVE);
 const DESKTOP = Boolean(window.MISGASTOS_DESKTOP);
+// El dueño administra personas y cuentas desde la PC o, con su contraseña, desde su celular.
+const ADMIN = DESKTOP || Boolean(window.MIPLATA_ADMIN);
 // Nombre de la persona dueña de este celular cuando no es el dueño de la PC o del servidor.
 const PERSON_NAME = typeof window.MIPLATA_PERSON === 'string' ? window.MIPLATA_PERSON : '';
 const SAVINGS_CURRENCIES = [
@@ -165,7 +167,7 @@ let desktopInfo = { networks: [], devices: [], people: [], pending: [], backupDi
 let pairingInfo = null;
 let selectedNetwork = '';
 let pairPerson = 'owner';
-let profile = { name: PERSON_NAME, username: null, avatar: null, admin: DESKTOP };
+let profile = { name: PERSON_NAME, username: null, avatar: null, admin: ADMIN };
 let restoreCandidate = null;
 let filtersOpen = false;
 let rangeFrom = '';
@@ -730,6 +732,7 @@ function installHint() {
 }
 
 function shell(content) {
+  const hint = installHint();
   const themeIcon = data.theme === 'light' ? 'moon' : 'sun';
   return (LIVE ? '' : '<div class="prototype-ribbon"><span class="prototype-dot"></span> PROTOTIPO DE DISEÑO <span class="ribbon-separator">|</span> Datos ficticios</div>') +
     '<div class="app-shell">' +
@@ -739,11 +742,11 @@ function shell(content) {
           navItem('home', 'Inicio', 'home') + navItem('transactions', 'Movimientos', 'list') + navItem('categories', 'Categorías', 'categories') + navItem('savings', 'Ahorros', 'savings') + navItem('settings', 'Ajustes', 'settings') +
         '</nav>' + sidebarWidgets() + '<div class="sidebar-foot">' + (LIVE && DESKTOP ? sideStatusMarkup() : '<span class="demo-status"><span class="status-dot"></span> ' + (LIVE ? 'Datos guardados en tu PC' : 'Modo demostración') + '</span><small>' + (LIVE ? 'Se sincronizan con tus celulares vinculados.' : 'Los cambios solo viven en este navegador.') + '</small>') + '</div></aside>' +
       '<div class="app-body"><div class="mobile-topbar"><div class="mobile-wordmark"><span class="brand-mark"><img src="assets/miplata-logo.png" alt="" width="29" height="29" style="display:block;width:29px;height:29px;max-width:29px;max-height:29px" /></span><strong>MiPlata</strong></div><div class="mobile-actions"><button class="icon-button" data-action="toggle-theme" aria-label="Cambiar tema" type="button">' + icon(themeIcon, 20) + '</button>' + (LIVE && !DESKTOP ? '<button class="icon-button" data-action="logout" type="button" aria-label="Cerrar sesión" title="Cerrar sesión">' + icon('logout', 19) + '</button>' : '') + (LIVE ? '<button class="mobile-avatar" data-action="open-profile" type="button" aria-label="Tu perfil">' + avatarMarkup('small') + '</button>' : '') + '</div></div>' +
-        '<main class="main-content" id="main-content">' + content + '</main></div>' +
+        '<main class="main-content' + (hint ? ' with-install-hint' : '') + '" id="main-content">' + content + '</main></div>' +
       '<nav class="mobile-nav" aria-label="Principal">' +
         navItem('home', 'Inicio', 'home') + navItem('transactions', 'Movimientos', 'list') + navItem('categories', 'Categorías', 'categories') + navItem('savings', 'Ahorros', 'savings') + navItem('settings', 'Ajustes', 'settings') +
       '</nav>' +
-    '</div>' + installHint() + (modal ? renderModal() : '');
+    '</div>' + hint + (modal ? renderModal() : '');
 }
 
 function pageHeader(eyebrow, title, subtitle, actions, className) {
@@ -1074,12 +1077,12 @@ function renderSettings() {
       '<section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('wallet', 20) + '</span><div><h2>Saldo inicial</h2><p>' + money(data.openingBalance) + '</p></div></div><button class="setting-action" data-action="edit-opening-balance" type="button"><span>' + icon('edit', 18) + ' Cambiar saldo inicial</span>' + icon('arrowRight', 18) + '</button></section>' +
       '<section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('phone', 20) + '</span><div><h2>' + (DESKTOP ? 'Tu iPhone' : 'Este dispositivo') + '</h2><p>' + (DESKTOP ? 'Vincula y revoca dispositivos desde esta PC.' : 'Tiene tu sesión iniciada y quedó como dispositivo de confianza.') + '</p></div></div>' +
         (DESKTOP ? '' : '<button class="setting-action" data-action="logout" type="button"><span>' + icon('close', 18) + ' Cerrar sesión en este dispositivo</span>' + icon('arrowRight', 18) + '</button>') +
-        (DESKTOP ? '<button class="setting-action" data-action="show-qr" type="button"><span>' + icon('qr', 18) + ' Conectar iPhone con QR</span>' + icon('arrowRight', 18) + '</button>' + (devices || '<p class="settings-note">Todavía no hay celulares vinculados.</p>') : '') + '</section>' +
+        (DESKTOP ? '<button class="setting-action" data-action="show-qr" type="button"><span>' + icon('qr', 18) + ' Conectar iPhone con QR</span>' + icon('arrowRight', 18) + '</button>' + (devices || '<p class="settings-note">Todavía no hay celulares vinculados.</p>') : ADMIN && devices ? '<p class="settings-note">Dispositivos con tu sesión iniciada:</p>' + devices : '') + '</section>' +
       (DESKTOP ? '<section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('download', 20) + '</span><div><h2>Copias de seguridad</h2><p>Se guarda una copia local diaria cuando cambias datos.</p></div></div>' +
         '<button class="setting-action" data-action="export-data" type="button"><span>' + icon('download', 18) + ' Exportar mis datos</span>' + icon('arrowRight', 18) + '</button>' +
         '<button class="setting-action" data-action="restore-data" type="button"><span>' + icon('reset', 18) + ' Restaurar una copia</span>' + icon('arrowRight', 18) + '</button><input id="restore-file" type="file" accept=".json,application/json" hidden />' +
-        '<p class="settings-note">Copias automáticas en ' + escapeHtml(desktopInfo.backupDir || 'la carpeta de datos de MiPlata') + '</p></section>' +
-      '<section class="panel settings-panel people-panel"><div class="settings-heading"><span class="settings-icon">' + icon('user', 20) + '</span><div><h2>Personas y cuentas</h2><p>Cada persona entra con su usuario y ve solo sus propios gastos.</p></div></div>' + people +
+        '<p class="settings-note">Copias automáticas en ' + escapeHtml(desktopInfo.backupDir || 'la carpeta de datos de MiPlata') + '</p></section>' : '') +
+      (ADMIN ? '<section class="panel settings-panel people-panel"><div class="settings-heading"><span class="settings-icon">' + icon('user', 20) + '</span><div><h2>Personas y cuentas</h2><p>Cada persona entra con su usuario y ve solo sus propios gastos.</p></div></div>' + (DESKTOP ? '' : '<p class="settings-note">Como estás fuera de la PC, te pediremos tu contraseña antes de hacer cambios.</p>') + people +
         ((desktopInfo.people || []).length ? '' : '<p class="settings-note">Agrega a alguien de tu familia o a un amigo para que lleve sus gastos aquí, sin ver los tuyos.</p>') +
         '<button class="setting-action" data-action="add-person" type="button"><span>' + icon('plus', 18) + ' Agregar persona</span>' + icon('arrowRight', 18) + '</button></section>' : '') + '</div>';
   }
@@ -1442,6 +1445,7 @@ function renderModal() {
   if (modal.type === 'profile') return profileModal();
   if (modal.type === 'edit-person') return editPersonModal();
   if (modal.type === 'password') return passwordModal();
+  if (modal.type === 'reauth') return reauthModal();
   if (modal.type === 'goal') return goalModal();
   if (modal.type === 'recurring') return recurringModal();
   return '';
@@ -1728,9 +1732,9 @@ document.addEventListener('click', function (event) {
   const setTheme = event.target.closest('[data-theme-option]');
   if (setTheme) { data.theme = setTheme.dataset.themeOption; saveData(); render(); return; }
   const network = event.target.closest('[data-pair-address]');
-  if (network && LIVE && DESKTOP) { selectedNetwork = network.dataset.pairAddress; pairingInfo = null; render(); startPairing(selectedNetwork); return; }
+  if (network && LIVE && ADMIN) { selectedNetwork = network.dataset.pairAddress; pairingInfo = null; render(); startPairing(selectedNetwork); return; }
   const decision = event.target.closest('[data-pair-decision]');
-  if (decision && LIVE && DESKTOP) {
+  if (decision && LIVE && ADMIN) {
     apiPost('/api/pair/decision', { id: decision.dataset.requestId, approve: decision.dataset.pairDecision === 'approve' })
       .then(function () { return refreshDesktopInfo(false); })
       .then(function () {
@@ -1742,24 +1746,24 @@ document.addEventListener('click', function (event) {
     return;
   }
   const pairFor = event.target.closest('[data-pair-person]');
-  if (pairFor && LIVE && DESKTOP) { pairPerson = pairFor.dataset.pairPerson; modal = { type: 'qr' }; pairingInfo = null; render(); startPairing(selectedNetwork); return; }
+  if (pairFor && LIVE && ADMIN) { pairPerson = pairFor.dataset.pairPerson; modal = { type: 'qr' }; pairingInfo = null; render(); startPairing(selectedNetwork); return; }
   const invite = event.target.closest('[data-person-invite]');
-  if (invite && LIVE && DESKTOP) {
+  if (invite && LIVE && ADMIN) {
     const personId = invite.dataset.personInvite;
     const person = personId === 'owner' ? { name: 'ti' } : personById(personId);
     apiPost('/api/invites', { personId: personId }).then(function (result) { modal = { type: 'invite', personId: personId, personName: person ? person.name : '', code: result.code, expiresAt: result.expiresAt }; render(); }).catch(function (error) { toast(error.message); });
     return;
   }
   const editPerson = event.target.closest('[data-edit-person]');
-  if (editPerson && LIVE && DESKTOP) { modal = { type: 'edit-person', personId: editPerson.dataset.editPerson }; render(); document.getElementById('edit-name')?.focus(); return; }
+  if (editPerson && LIVE && ADMIN) { modal = { type: 'edit-person', personId: editPerson.dataset.editPerson }; render(); document.getElementById('edit-name')?.focus(); return; }
   const removeAccount = event.target.closest('[data-remove-account]');
-  if (removeAccount && LIVE && DESKTOP) { modal = { type: 'confirmation', action: 'remove-account', id: removeAccount.dataset.removeAccount }; render(); return; }
+  if (removeAccount && LIVE && ADMIN) { modal = { type: 'confirmation', action: 'remove-account', id: removeAccount.dataset.removeAccount }; render(); return; }
   const passwordFor = event.target.closest('[data-person-password]');
-  if (passwordFor && LIVE && DESKTOP) { modal = { type: 'password', personId: passwordFor.dataset.personPassword }; render(); document.getElementById('new-password')?.focus(); return; }
+  if (passwordFor && LIVE && ADMIN) { modal = { type: 'password', personId: passwordFor.dataset.personPassword }; render(); document.getElementById('new-password')?.focus(); return; }
   const removePerson = event.target.closest('[data-remove-person]');
-  if (removePerson && LIVE && DESKTOP) { modal = { type: 'confirmation', action: 'remove-person', id: removePerson.dataset.removePerson }; render(); return; }
+  if (removePerson && LIVE && ADMIN) { modal = { type: 'confirmation', action: 'remove-person', id: removePerson.dataset.removePerson }; render(); return; }
   const revoke = event.target.closest('[data-revoke-device]');
-  if (revoke && LIVE && DESKTOP) { modal = { type: 'confirmation', action: 'revoke-device', id: revoke.dataset.revokeDevice }; render(); return; }
+  if (revoke && LIVE && ADMIN) { modal = { type: 'confirmation', action: 'revoke-device', id: revoke.dataset.revokeDevice }; render(); return; }
   const modalKind = event.target.closest('[data-modal-kind]');
   if (modalKind && modal && modal.type === 'transaction') {
     const currentAmount = document.getElementById('amount').value;
@@ -1805,8 +1809,9 @@ document.addEventListener('click', function (event) {
       installHintHidden = true;
       try { localStorage.setItem(INSTALL_HINT_KEY, '1'); } catch (error) { /* sin almacenamiento, se oculta hasta recargar */ }
       document.querySelector('.install-hint')?.remove();
+      document.getElementById('main-content')?.classList.remove('with-install-hint');
       break;
-    case 'add-person': if (LIVE && DESKTOP) { modal = { type: 'person' }; render(); document.getElementById('person-name')?.focus(); } break;
+    case 'add-person': if (LIVE && ADMIN) { modal = { type: 'person' }; render(); document.getElementById('person-name')?.focus(); } break;
     case 'show-qr':
       pairPerson = 'owner'; modal = { type: 'qr' }; pairingInfo = null; pairingStep = 'start'; render();
       if (LIVE && DESKTOP) refreshDesktopInfo(false).then(function () { startPairing(selectedNetwork); });
@@ -1816,7 +1821,7 @@ document.addEventListener('click', function (event) {
     case 'restore-data': if (LIVE && DESKTOP) document.getElementById('restore-file')?.click(); break;
     case 'reload-app': window.location.reload(); break;
     case 'open-pair': pairingStep = data.linked ? 'done' : 'start'; navigate('pair'); break;
-    case 'close-modal': modal = null; render(); break;
+    case 'close-modal': if (modal && modal.type === 'reauth') cancelReauth(); modal = null; render(); break;
     case 'edit-budget': modal = { type: 'budget' }; render(); document.getElementById('monthly-budget')?.focus(); break;
     case 'remove-budget': delete data.monthlyBudget; modal = null; saveData(); render(); toast('Presupuesto quitado'); break;
     case 'edit-goal': modal = { type: 'goal' }; render(); document.getElementById('goal-name')?.focus(); break;
@@ -1856,15 +1861,15 @@ document.addEventListener('click', function (event) {
       } else if (modal.action === 'logout' && LIVE && !DESKTOP) {
         modal = null; render();
         apiPost('/api/logout', {}).then(function () { window.location.replace('/'); }).catch(function (error) { toast(error.message); });
-      } else if (modal.action === 'remove-account' && LIVE && DESKTOP) {
+      } else if (modal.action === 'remove-account' && LIVE && ADMIN) {
         const id = modal.id;
         modal = null; render();
         apiPost('/api/accounts/remove', { personId: id }).then(function () { return Promise.all([refreshDesktopInfo(false), loadProfile()]); }).then(function () { render(); toast('Cuenta borrada'); }).catch(function (error) { toast(error.message); });
-      } else if (modal.action === 'remove-person' && LIVE && DESKTOP) {
+      } else if (modal.action === 'remove-person' && LIVE && ADMIN) {
         const id = modal.id;
         modal = null; render();
         apiPost('/api/people/remove', { id }).then(function () { return refreshDesktopInfo(false); }).then(function () { render(); toast('Persona eliminada'); }).catch(function (error) { toast(error.message); });
-      } else if (modal.action === 'revoke-device' && LIVE && DESKTOP) {
+      } else if (modal.action === 'revoke-device' && LIVE && ADMIN) {
         const id = modal.id;
         modal = null; render();
         apiPost('/api/devices/revoke', { id }).then(function () { return refreshDesktopInfo(false); }).then(function () { toast('Acceso revocado'); }).catch(function (error) { toast(error.message); });
@@ -2009,7 +2014,7 @@ document.addEventListener('submit', function (event) {
     event.preventDefault();
     const name = String(new FormData(event.target).get('name') || '').trim();
     if (!name) { toast('Escribe tu nombre'); return; }
-    apiPost('/api/profile', { name: name }).then(function (result) { profile = result; modal = null; render(); toast('Nombre guardado'); if (DESKTOP) refreshDesktopInfo(false); }).catch(function (error) { toast(error.message); });
+    apiPost('/api/profile', { name: name }).then(function (result) { profile = result; modal = null; render(); toast('Nombre guardado'); if (ADMIN) refreshDesktopInfo(false); }).catch(function (error) { toast(error.message); });
   } else if (event.target.id === 'own-password-form') {
     event.preventDefault();
     const form = new FormData(event.target);
@@ -2023,6 +2028,20 @@ document.addEventListener('submit', function (event) {
     const payload = { personId: modal.personId, name: String(form.get('name') || '').trim() };
     if (form.has('username')) payload.username = String(form.get('username') || '').trim();
     apiPost('/api/people/edit', payload).then(function () { modal = null; return Promise.all([refreshDesktopInfo(false), loadProfile()]); }).then(function () { render(); toast('Cambios guardados'); }).catch(function (error) { toast(error.message); });
+  } else if (event.target.id === 'reauth-form') {
+    event.preventDefault();
+    const password = String(new FormData(event.target).get('password') || '');
+    if (!password) { toast('Escribe tu contraseña'); return; }
+    const button = event.target.querySelector('button[type="submit"]');
+    button.disabled = true;
+    fetch('/api/admin/unlock', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: password }) })
+      .then(function (response) { return response.json().then(function (result) { if (!response.ok) throw new Error(result.error || 'No se pudo confirmar'); }); })
+      .then(function () {
+        const waiter = reauthWaiter; reauthWaiter = null;
+        modal = waiter ? waiter.previous : null; render();
+        if (waiter) waiter.resolve();
+      })
+      .catch(function (error) { button.disabled = false; toast(error.message); });
   } else if (event.target.id === 'password-form') {
     event.preventDefault();
     const form = new FormData(event.target);
@@ -2209,7 +2228,7 @@ document.addEventListener('keydown', function (event) {
     return;
   }
   if (event.key === 'Escape' && closeReceiptViewer()) { event.preventDefault(); return; }
-  if (event.key === 'Escape' && modal) { modal = modal.type === 'confirmation' && modal.returnTo ? modal.returnTo : null; render(); }
+  if (event.key === 'Escape' && modal) { if (modal.type === 'reauth') cancelReauth(); modal = modal.type === 'confirmation' && modal.returnTo ? modal.returnTo : null; render(); }
 });
 
 document.addEventListener('focusin', function (event) {
@@ -2272,12 +2291,38 @@ window.addEventListener('storage', function (event) {
 async function apiPost(url, payload) {
   const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
   const result = await response.json();
+  if (response.status === 403 && result.reauth) {
+    await confirmAdminPassword();
+    return apiPost(url, payload);
+  }
   if (!response.ok) throw new Error(result.error || 'No se pudo completar la acción');
   return result;
 }
 
+// Fuera de la PC, el servidor pide la contraseña del dueño antes de administrar; al confirmarla, se repite la acción.
+let reauthWaiter = null;
+function confirmAdminPassword() {
+  if (reauthWaiter) reauthWaiter.reject(new Error('Acción cancelada'));
+  return new Promise(function (resolve, reject) {
+    reauthWaiter = { resolve: resolve, reject: reject, previous: modal && modal.type !== 'reauth' ? modal : null };
+    modal = { type: 'reauth' }; render();
+    document.getElementById('reauth-password')?.focus();
+  });
+}
+function cancelReauth() {
+  if (!reauthWaiter) return;
+  const waiter = reauthWaiter; reauthWaiter = null;
+  waiter.reject(new Error('Acción cancelada'));
+}
+
+function reauthModal() {
+  return sideDialog('ADMINISTRACIÓN', 'Confirma tu contraseña', '<form id="reauth-form" novalidate><p class="savings-form-note">Por seguridad, la pedimos antes de cambiar personas o cuentas desde fuera de la PC. Durante 10 minutos no volveremos a pedirla en este dispositivo.</p>' +
+    '<label class="field-label" for="reauth-password">Tu contraseña</label><input class="text-input" id="reauth-password" name="password" type="password" autocomplete="current-password" required />' +
+    '<div class="dialog-actions"><button class="button button-outline" type="button" data-action="close-modal">Cancelar</button><button class="button button-primary" type="submit">Confirmar</button></div></form>');
+}
+
 async function refreshDesktopInfo(openApproval) {
-  if (!LIVE || !DESKTOP) return;
+  if (!LIVE || !ADMIN) return;
   try {
     const response = await fetch('/api/desktop-info', { cache: 'no-store' });
     if (!response.ok) return;
@@ -2294,7 +2339,7 @@ async function refreshDesktopInfo(openApproval) {
 }
 
 async function startPairing(address) {
-  if (!LIVE || !DESKTOP) return;
+  if (!LIVE || !ADMIN) return;
   try {
     const result = await apiPost('/api/pair/start', { address: address || selectedNetwork, personId: pairPerson });
     selectedNetwork = result.address;
@@ -2325,9 +2370,9 @@ async function initializeLive() {
     data = saved.data;
     await loadProfile();
     render();
-    if (DESKTOP) await refreshDesktopInfo(false);
+    if (ADMIN) await refreshDesktopInfo(false);
     setInterval(refreshLiveState, 10000);
-    if (DESKTOP) setInterval(function () { refreshDesktopInfo(false); }, 2500);
+    if (ADMIN) setInterval(function () { refreshDesktopInfo(false); }, DESKTOP ? 2500 : 10000);
     // La app queda abierta en la bandeja por días: al cambiar de mes, pasa al mes nuevo si no se estaba viendo otro.
     let followedMonth = selectedMonth;
     setInterval(function () {

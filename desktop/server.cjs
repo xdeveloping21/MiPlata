@@ -139,6 +139,9 @@ function startServer(store, root, onPending, options = {}) {
   let pairExpires = 0;
   let pairPerson = 'owner';
   const limiter = attemptLimiter();
+  // Administrar desde fuera de la PC exige repetir la contraseña; queda desbloqueado unos minutos en ese dispositivo.
+  const adminUnlocked = new Map();
+  const ADMIN_UNLOCK_MS = 10 * 60 * 1000;
 
   function startSession(res, personId, deviceName, secure) {
     const token = crypto.randomBytes(32).toString('base64url');
@@ -165,6 +168,9 @@ function startServer(store, root, onPending, options = {}) {
       const authorized = isLocal || Boolean(device);
       // La PC (o el túnel SSH) usa los datos del dueño; cada dispositivo, los de la persona a la que se vinculó.
       const personId = isLocal ? 'owner' : device?.person_id || 'owner';
+      // El dueño también administra desde su celular si entró con su usuario y contraseña.
+      const remoteAdmin = !isLocal && Boolean(device) && personId === 'owner' && Boolean(store.accountFor('owner'));
+      const admin = isLocal || remoteAdmin;
       const origin = req.headers.origin;
       if (req.method === 'POST' && origin && new URL(origin).host !== req.headers.host) return json(res, 403, { error: 'Origen no permitido' });
 
@@ -250,17 +256,17 @@ function startServer(store, root, onPending, options = {}) {
         return res.end(receipt.bytes);
       }
 
-      if (pathname === '/api/profile' && req.method === 'GET') return json(res, 200, { ...own.getProfile(), admin: isLocal });
+      if (pathname === '/api/profile' && req.method === 'GET') return json(res, 200, { ...own.getProfile(), admin });
       if (pathname === '/api/profile' && req.method === 'POST') {
         const body = await readBody(req);
-        try { return json(res, 200, { ...own.setName(body.name), admin: isLocal }); } catch (error) { return json(res, 400, { error: error.message }); }
+        try { return json(res, 200, { ...own.setName(body.name), admin }); } catch (error) { return json(res, 400, { error: error.message }); }
       }
       if (pathname === '/api/profile/avatar' && req.method === 'POST') {
         if (!/^image\/(jpeg|png|webp)$/.test(String(req.headers['content-type'] || ''))) return json(res, 415, { error: 'La foto debe ser JPG, PNG o WebP' });
         const bytes = await readRaw(req, 1_500_000);
-        try { return json(res, 200, { ...own.saveAvatar(bytes), admin: isLocal }); } catch (error) { return json(res, 400, { error: error.message }); }
+        try { return json(res, 200, { ...own.saveAvatar(bytes), admin }); } catch (error) { return json(res, 400, { error: error.message }); }
       }
-      if (pathname === '/api/profile/avatar/remove' && req.method === 'POST') return json(res, 200, { ...own.removeAvatar(), admin: isLocal });
+      if (pathname === '/api/profile/avatar/remove' && req.method === 'POST') return json(res, 200, { ...own.removeAvatar(), admin });
       if (pathname === '/api/profile/avatar' && req.method === 'GET') {
         const avatar = own.readAvatar();
         if (!avatar) return json(res, 404, { error: 'Sin foto' });
@@ -278,7 +284,21 @@ function startServer(store, root, onPending, options = {}) {
         return json(res, 200, { ok: true });
       }
 
-      if (pathname.startsWith('/api/') && !isLocal) return json(res, 403, { error: 'Esta acción se hace en la PC' });
+      if (pathname === '/api/admin/unlock' && req.method === 'POST') {
+        if (!remoteAdmin) return json(res, 403, { error: 'Esta acción se hace en la PC' });
+        const body = await readBody(req);
+        const keys = ['ip:' + (proxied ? String(req.headers['x-miplata-client'] || 'internet') : String(req.socket.remoteAddress || '')), 'person:owner'];
+        if (limiter.locked(keys)) return json(res, 429, { error: 'Demasiados intentos. Espera 15 minutos y vuelve a intentarlo.' });
+        if (store.verifyLogin(store.accountFor('owner').username, body.password) !== 'owner') { limiter.fail(keys); return json(res, 400, { error: 'La contraseña no es correcta' }); }
+        limiter.clear(keys);
+        adminUnlocked.set(device.id, Date.now() + ADMIN_UNLOCK_MS);
+        return json(res, 200, { ok: true });
+      }
+      if (pathname.startsWith('/api/') && !isLocal) {
+        // Las copias de seguridad siguen siendo solo de la PC.
+        if (!remoteAdmin || pathname === '/api/restore' || pathname === '/api/export') return json(res, 403, { error: 'Esta acción se hace en la PC' });
+        if (req.method === 'POST' && !((adminUnlocked.get(device.id) || 0) > Date.now())) return json(res, 403, { error: 'Confirma tu contraseña para continuar', reauth: true });
+      }
       if (pathname === '/api/people/edit' && req.method === 'POST') {
         const body = await readBody(req);
         try {
@@ -359,7 +379,7 @@ function startServer(store, root, onPending, options = {}) {
         return json(res, 200, restored);
       }
 
-      if (pathname === '/runtime.js') return res.writeHead(200, { 'Content-Type': TYPES['.js'], 'Cache-Control': 'no-store' }).end('window.MISGASTOS_LIVE=true;window.MISGASTOS_DESKTOP=' + JSON.stringify(isLocal) + ';window.MIPLATA_PERSON=' + JSON.stringify(authorized ? store.personName(personId) : null).replace(/</g, '\\u003c') + ';');
+      if (pathname === '/runtime.js') return res.writeHead(200, { 'Content-Type': TYPES['.js'], 'Cache-Control': 'no-store' }).end('window.MISGASTOS_LIVE=true;window.MISGASTOS_DESKTOP=' + JSON.stringify(isLocal) + ';window.MIPLATA_ADMIN=' + JSON.stringify(admin) + ';window.MIPLATA_PERSON=' + JSON.stringify(authorized ? store.personName(personId) : null).replace(/</g, '\\u003c') + ';');
       if (pathname === '/assets/miplata-logo.png') {
         const bytes = fs.readFileSync(path.join(root, 'assets', 'miplata-logo.png'));
         res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': bytes.length, 'Cache-Control': 'no-store' });
