@@ -57,8 +57,8 @@ function pairPage(token, expires) {
 // Pantalla para entrar con usuario y contraseña, o crear la cuenta con un código de invitación.
 function loginPage() {
   return `<!doctype html><html lang="es"><head><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta charset="utf-8"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="MiPlata"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="manifest" href="/manifest.webmanifest"><title>MiPlata</title><style>
-  :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#13221b;background:#f7faf8}*{box-sizing:border-box}body{margin:0;min-height:100dvh;display:grid;place-items:center;padding:24px}.card{width:min(100%,400px);padding:28px;border:1px solid #e2ece6;border-radius:22px;background:#fff;box-shadow:0 18px 60px #10302212}.brand{display:flex;align-items:center;gap:12px;font-weight:800;font-size:22px;letter-spacing:-.03em}.brand img{width:44px;height:44px}h1{font-size:24px;margin:24px 0 6px;letter-spacing:-.03em}p{color:#5c6d64;line-height:1.5;margin:0 0 18px;font-size:15px}label{display:block;font-size:13px;font-weight:700;margin:14px 0 6px}input{width:100%;font:inherit;font-size:16px;padding:12px 13px;border:1px solid #d5e3db;border-radius:11px;background:#fff;color:inherit}input:focus{outline:2px solid #1fa77455;border-color:#1fa774}.code{text-transform:uppercase;letter-spacing:.12em}button{width:100%;margin-top:20px;background:#1fa774;color:#fff;border:0;border-radius:11px;padding:14px;font:inherit;font-weight:800;cursor:pointer}button:disabled{opacity:.6}.switch{display:block;margin-top:16px;background:none;color:#138a5e;padding:6px;font-weight:700;width:100%;border:0;font:inherit;font-size:14px;cursor:pointer}.error{margin-top:14px;padding:11px 13px;border-radius:10px;background:#fdecec;color:#b42318;font-size:14px}.note{margin-top:14px;font-size:12px;color:#7a8a81}.install{width:min(100%,400px);margin-top:14px;display:flex;gap:12px;align-items:flex-start;padding:14px 10px 14px 14px;border:1px solid #e2ece6;border-radius:18px;background:#fff;font-size:12px;line-height:1.5;color:#5c6f65}.install[hidden]{display:none}.install img{width:40px;height:40px;border-radius:10px;flex:none}.install strong{display:block;font-size:14px;color:#13221b}.install ol{margin:4px 0 0;padding-left:18px}.install b{color:#13221b}.install svg{vertical-align:-3px;color:#16865c}.install .x{flex:none;width:30px;height:30px;margin:-4px 0 0;padding:0;border-radius:9px;background:none;color:inherit;font-size:20px;line-height:1}.credit{margin:18px 0 0;padding-top:14px;border-top:1px solid #e2ece6;text-align:center;font-size:11px;color:#8a9a91}[hidden]{display:none!important}
-  @media (prefers-color-scheme:dark){:root{background:#0f1814;color:#e8f2ec}.card{background:#14211b;border-color:#22352c}p,.note{color:#9db3a7}.credit{color:#7f968a;border-color:#22352c}.install{background:#14211b;border-color:#22352c}.install b,.install strong{color:#e8f2ec}.install svg{color:#4fe0a6}input{background:#0f1814;border-color:#2a4136}.switch{color:#4fe0a6}button{color:#0c1512;background:#4fe0a6}.error{background:#3a1717;color:#ffb4ab}}
+  :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#13221b;background:#f7faf8}*{box-sizing:border-box}body{margin:0;min-height:100dvh;display:grid;place-items:center;padding:24px}.card{width:min(100%,400px);padding:28px;border:1px solid #e2ece6;border-radius:22px;background:#fff;box-shadow:0 18px 60px #10302212}.brand{display:flex;align-items:center;gap:12px;font-weight:800;font-size:22px;letter-spacing:-.03em}.brand img{width:44px;height:44px}h1{font-size:24px;margin:24px 0 6px;letter-spacing:-.03em}p{color:#5c6d64;line-height:1.5;margin:0 0 18px;font-size:15px}label{display:block;font-size:13px;font-weight:700;margin:14px 0 6px}input{width:100%;font:inherit;font-size:16px;padding:12px 13px;border:1px solid #d5e3db;border-radius:11px;background:#fff;color:inherit}input:focus{outline:2px solid #1fa77455;border-color:#1fa774}.code{text-transform:uppercase;letter-spacing:.12em}button{width:100%;margin-top:20px;background:#1fa774;color:#fff;border:0;border-radius:11px;padding:14px;font:inherit;font-weight:800;cursor:pointer}button:disabled{opacity:.6}.switch{display:block;margin-top:16px;background:none;color:#138a5e;padding:6px;font-weight:700;width:100%;border:0;font:inherit;font-size:14px;cursor:pointer}.error{margin-top:14px;padding:11px 13px;border-radius:10px;background:#fdecec;color:#b42318;font-size:14px}.note{margin-top:14px;font-size:12px;color:#7a8a81}.hint{display:block;margin-top:6px;font-size:12px;color:#7a8a81}.install{width:min(100%,400px);margin-top:14px;display:flex;gap:12px;align-items:flex-start;padding:14px 10px 14px 14px;border:1px solid #e2ece6;border-radius:18px;background:#fff;font-size:12px;line-height:1.5;color:#5c6f65}.install[hidden]{display:none}.install img{width:40px;height:40px;border-radius:10px;flex:none}.install strong{display:block;font-size:14px;color:#13221b}.install ol{margin:4px 0 0;padding-left:18px}.install b{color:#13221b}.install svg{vertical-align:-3px;color:#16865c}.install .x{flex:none;width:30px;height:30px;margin:-4px 0 0;padding:0;border-radius:9px;background:none;color:inherit;font-size:20px;line-height:1}.credit{margin:18px 0 0;padding-top:14px;border-top:1px solid #e2ece6;text-align:center;font-size:11px;color:#8a9a91}[hidden]{display:none!important}
+  @media (prefers-color-scheme:dark){:root{background:#0f1814;color:#e8f2ec}.card{background:#14211b;border-color:#22352c}p,.note,.hint{color:#9db3a7}.credit{color:#7f968a;border-color:#22352c}.install{background:#14211b;border-color:#22352c}.install b,.install strong{color:#e8f2ec}.install svg{color:#4fe0a6}input{background:#0f1814;border-color:#2a4136}.switch{color:#4fe0a6}button{color:#0c1512;background:#4fe0a6}.error{background:#3a1717;color:#ffb4ab}}
   </style></head><body><main class="card"><div class="brand"><img src="/assets/miplata-logo.png" alt="">MiPlata</div>
   <form id="login" novalidate><h1>Iniciar sesión</h1><p>Entra una vez y este dispositivo quedará guardado como de confianza.</p>
   <label for="l-user">Usuario</label><input id="l-user" autocomplete="username" autocapitalize="none" spellcheck="false" required>
@@ -66,7 +66,7 @@ function loginPage() {
   <div class="error" hidden></div><button type="submit">Entrar</button><button class="switch" type="button" data-show="register">¿Tienes un código de invitación? Crea tu cuenta</button></form>
   <form id="register" novalidate hidden><h1>Crear cuenta</h1><p>Usa el código de invitación que te dieron. Lo haces una sola vez.</p>
   <label for="r-code">Código de invitación</label><input id="r-code" class="code" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" placeholder="ABCD-1234" required>
-  <label for="r-user">Elige un usuario</label><input id="r-user" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+  <label for="r-user">Elige un usuario</label><input id="r-user" autocomplete="username" autocapitalize="none" spellcheck="false" required><small class="hint">De 3 a 30 letras o números, sin espacios. Ejemplo: raul.s</small>
   <label for="r-pass">Contraseña (mínimo 8 caracteres)</label><input id="r-pass" type="password" autocomplete="new-password" required>
   <label for="r-pass2">Repite la contraseña</label><input id="r-pass2" type="password" autocomplete="new-password" required>
   <div class="error" hidden></div><button type="submit">Crear cuenta y entrar</button><button class="switch" type="button" data-show="login">Ya tengo cuenta</button></form>
@@ -77,7 +77,7 @@ function loginPage() {
   document.querySelectorAll('[data-show]').forEach((button)=>button.onclick=()=>{for(const [name,form] of Object.entries(forms))form.hidden=name!==button.dataset.show;forms[button.dataset.show].querySelector('input').focus()});
   async function send(form,url,body){const error=form.querySelector('.error');const submit=form.querySelector('button[type=submit]');error.hidden=true;submit.disabled=true;try{const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign(body,{device:/iPhone/i.test(navigator.userAgent)?'iPhone':/iPad/i.test(navigator.userAgent)?'iPad':/Android/i.test(navigator.userAgent)?'Android':/Mac/i.test(navigator.userAgent)?'Mac':/Windows/i.test(navigator.userAgent)?'PC con Windows':'Navegador'}))});const result=await response.json().catch(()=>({}));if(!response.ok)throw new Error(result.error||'No se pudo completar');location.replace('/')}catch(problem){error.textContent=problem.message;error.hidden=false;submit.disabled=false}}
   forms.login.onsubmit=(event)=>{event.preventDefault();send(forms.login,'/api/login',{username:document.getElementById('l-user').value,password:document.getElementById('l-pass').value})};
-  forms.register.onsubmit=(event)=>{event.preventDefault();const pass=document.getElementById('r-pass').value;if(pass!==document.getElementById('r-pass2').value){const error=forms.register.querySelector('.error');error.textContent='Las contraseñas no coinciden';error.hidden=false;return}send(forms.register,'/api/register',{code:document.getElementById('r-code').value,username:document.getElementById('r-user').value,password:pass})};
+  forms.register.onsubmit=(event)=>{event.preventDefault();const pass=document.getElementById('r-pass').value;const user=document.getElementById('r-user').value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();const problem=!/^[a-z0-9._-]{3,30}$/.test(user)?'El usuario debe tener entre 3 y 30 letras o números, sin espacios. También puedes usar punto, guion o guion bajo.':pass.length<8?'La contraseña debe tener al menos 8 caracteres.':pass!==document.getElementById('r-pass2').value?'Las contraseñas no coinciden.':'';if(problem){const error=forms.register.querySelector('.error');error.textContent=problem;error.hidden=false;return}send(forms.register,'/api/register',{code:document.getElementById('r-code').value,username:document.getElementById('r-user').value,password:pass})};
   document.getElementById('l-user').focus();
   </script></body></html>`;
 }
@@ -85,11 +85,13 @@ function loginPage() {
 // Bloquea por 15 minutos después de 5 intentos fallidos, por dirección y por usuario.
 function attemptLimiter() {
   const failures = new Map();
-  const LIMIT = 5;
+  // 5 intentos fallidos por usuario; por dirección se permiten más, porque una familia comparte la misma IP de su casa.
+  const limitFor = (key) => key.startsWith('ip:') ? 20 : 5;
   const LOCK_MS = 15 * 60 * 1000;
-  const locked = (keys) => keys.some((key) => { const entry = failures.get(key); return entry && entry.count >= LIMIT && Date.now() < entry.until; });
+  const waitMs = (keys) => Math.max(0, ...keys.map((key) => { const entry = failures.get(key); return entry && entry.count >= limitFor(key) ? entry.until - Date.now() : 0; }));
   return {
-    locked,
+    locked: (keys) => waitMs(keys) > 0,
+    message: (keys) => { const minutes = Math.max(1, Math.ceil(waitMs(keys) / 60000)); return 'Demasiados intentos. Espera ' + minutes + (minutes === 1 ? ' minuto' : ' minutos') + ' y vuelve a intentarlo.'; },
     fail(keys) {
       for (const key of keys) {
         const entry = failures.get(key);
@@ -206,7 +208,7 @@ function startServer(store, root, onPending, options = {}) {
         const body = await readBody(req);
         const address = proxied ? String(req.headers['x-miplata-client'] || 'internet') : String(req.socket.remoteAddress || '');
         const keys = ['ip:' + address, 'user:' + String(body.username || '').trim().toLowerCase()];
-        if (limiter.locked(keys)) return json(res, 429, { error: 'Demasiados intentos. Espera 15 minutos y vuelve a intentarlo.' });
+        if (limiter.locked(keys)) return json(res, 429, { error: limiter.message(keys) });
         if (pathname === '/api/login') {
           const personId = store.verifyLogin(body.username, body.password);
           if (!personId) { limiter.fail(keys); return json(res, 401, { error: 'Usuario o contraseña incorrectos' }); }
@@ -214,7 +216,8 @@ function startServer(store, root, onPending, options = {}) {
           return startSession(res, personId, body.device, secure);
         }
         let personId;
-        try { personId = store.registerAccount(body.code, body.username, body.password); } catch (error) { limiter.fail(keys.slice(0, 1)); return json(res, 400, { error: error.message }); }
+        // Solo cuenta como intento fallido un código equivocado; un usuario o contraseña que no cumple las reglas no bloquea.
+        try { personId = store.registerAccount(body.code, body.username, body.password); } catch (error) { if (error.badInvite) limiter.fail(keys.slice(0, 1)); return json(res, 400, { error: error.message }); }
         limiter.clear(keys);
         return startSession(res, personId, body.device, secure);
       }
@@ -276,7 +279,7 @@ function startServer(store, root, onPending, options = {}) {
       if (pathname === '/api/profile/password' && req.method === 'POST') {
         const body = await readBody(req);
         const keys = ['ip:' + (proxied ? String(req.headers['x-miplata-client'] || 'internet') : String(req.socket.remoteAddress || '')), 'person:' + personId];
-        if (limiter.locked(keys)) return json(res, 429, { error: 'Demasiados intentos. Espera 15 minutos y vuelve a intentarlo.' });
+        if (limiter.locked(keys)) return json(res, 429, { error: limiter.message(keys) });
         let changed;
         try { changed = own.changePassword(body.current, body.password); } catch (error) { return json(res, 400, { error: error.message }); }
         if (!changed) { limiter.fail(keys); return json(res, 400, { error: 'La contraseña actual no es correcta' }); }
@@ -288,7 +291,7 @@ function startServer(store, root, onPending, options = {}) {
         if (!remoteAdmin) return json(res, 403, { error: 'Esta acción se hace en la PC' });
         const body = await readBody(req);
         const keys = ['ip:' + (proxied ? String(req.headers['x-miplata-client'] || 'internet') : String(req.socket.remoteAddress || '')), 'person:owner'];
-        if (limiter.locked(keys)) return json(res, 429, { error: 'Demasiados intentos. Espera 15 minutos y vuelve a intentarlo.' });
+        if (limiter.locked(keys)) return json(res, 429, { error: limiter.message(keys) });
         if (store.verifyLogin(store.accountFor('owner').username, body.password) !== 'owner') { limiter.fail(keys); return json(res, 400, { error: 'La contraseña no es correcta' }); }
         limiter.clear(keys);
         adminUnlocked.set(device.id, Date.now() + ADMIN_UNLOCK_MS);

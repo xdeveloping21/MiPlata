@@ -125,7 +125,7 @@ test('accounts are created once with an invitation and passwords are not stored 
     const ana = store.addPerson('Ana');
     const { code } = store.createInvite(ana.id);
     assert.match(code, /^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
-    assert.throws(() => store.registerAccount('AAAA-BBBB', 'ana', 'secreta123'), /no es válido/);
+    assert.throws(() => store.registerAccount('AAAA-BBBB', 'ana', 'secreta123'), (error) => error.badInvite === true);
     assert.throws(() => store.registerAccount(code, 'a', 'secreta123'), /usuario/);
     assert.throws(() => store.registerAccount(code, 'ana', 'corta'), /8 caracteres/);
     assert.equal(store.registerAccount(code.toLowerCase().replace('-', ' '), 'Ana.Perez', 'secreta123'), ana.id);
@@ -136,7 +136,10 @@ test('accounts are created once with an invitation and passwords are not stored 
     assert.equal(store.listPeople()[0].username, 'ana.perez');
     const ownerInvite = store.createInvite('owner');
     assert.throws(() => store.registerAccount(ownerInvite.code, 'ana.perez', 'secreta123'), /ya existe/);
-    assert.equal(store.registerAccount(ownerInvite.code, 'raul', 'clave-del-dueno'), 'owner');
+    assert.throws(() => store.registerAccount(ownerInvite.code, 'raúl s', 'clave-del-dueno'), /sin espacios/);
+    assert.equal(store.registerAccount(ownerInvite.code, 'Raúl', 'clave-del-dueno'), 'owner');
+    assert.equal(store.verifyLogin('raul', 'clave-del-dueno'), 'owner');
+    assert.equal(store.verifyLogin('RAÚL', 'clave-del-dueno'), 'owner');
     assert.throws(() => store.createInvite(ana.id), /ya tiene usuario/);
     store.setPassword(ana.id, 'nueva-clave-1');
     assert.equal(store.verifyLogin('ana.perez', 'secreta123'), null);

@@ -136,8 +136,9 @@ const INVITE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const INVITE_MS = 7 * 24 * 60 * 60 * 1000;
 
 function cleanUsername(value) {
-  const username = String(value || '').trim().toLowerCase();
-  if (!/^[a-z0-9._-]{3,30}$/.test(username)) throw new Error('El usuario debe tener entre 3 y 30 letras, números, puntos o guiones, sin espacios');
+  // Sin tildes ni eñes: «Raúl» y «raul» son el mismo usuario.
+  const username = String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+  if (!/^[a-z0-9._-]{3,30}$/.test(username)) throw new Error('El usuario debe tener entre 3 y 30 letras o números, sin espacios. También puedes usar punto, guion o guion bajo.');
   return username;
 }
 
@@ -504,7 +505,7 @@ async function openStore(userDataPath, initialStatePath) {
 
   function registerAccount(code, username, password) {
     const invite = one('SELECT person_id, expires_at FROM invites WHERE code_hash = ?', [hashInvite(code)]);
-    if (!invite || Number(invite.expires_at) < Date.now() || !personExists(invite.person_id)) throw new Error('El código de invitación no es válido o ya venció');
+    if (!invite || Number(invite.expires_at) < Date.now() || !personExists(invite.person_id)) throw Object.assign(new Error('El código de invitación no es válido o ya venció'), { badInvite: true });
     const cleanName = cleanUsername(username);
     checkPassword(password);
     if (accountFor(invite.person_id)) throw new Error('Esta persona ya tiene usuario');
