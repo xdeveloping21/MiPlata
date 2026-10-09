@@ -166,6 +166,27 @@ button:focus-visible, input:focus-visible {
 .person-remove { width: 34px; height: 34px; flex: none; }
 .person-actions { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 0 0 10px 46px; }
 .person-actions .text-button { display: inline-flex; align-items: center; gap: 6px; }
+.login-alert { display: flex; align-items: center; gap: 14px; margin: 0 0 18px; padding: 14px 16px; border: 1px solid var(--border); border-left: 4px solid var(--danger-text); border-radius: 14px; background: var(--coral-wash); color: var(--text); }
+.login-alert > svg { flex: none; color: var(--danger-text); }
+.login-alert > div:first-of-type { flex: 1; min-width: 0; }
+.login-alert strong { display: block; font-size: 14px; }
+.login-alert p { margin: 2px 0 0; color: var(--text-soft); font-size: 12px; overflow-wrap: anywhere; }
+.login-alert-actions { display: flex; gap: 8px; flex: none; }
+.login-alert-actions .button { min-height: 36px; padding: 0 14px; font-size: 13px; }
+.activity-panel { align-self: start; }
+.activity-list { display: flex; flex-direction: column; }
+.activity-row { display: flex; gap: 12px; padding: 11px 0; border-top: 1px solid var(--border); }
+.activity-row p { margin: 0; font-size: 13px; color: var(--text); }
+.activity-row small { color: var(--text-soft); font-size: 11px; overflow-wrap: anywhere; }
+.activity-dot { flex: none; width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; background: var(--lavender-deep); }
+.activity-row.warning .activity-dot { background: var(--danger-text); }
+.activity-row.warning p { color: var(--danger-text); }
+.recovery-codes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 4px 0 16px; }
+.recovery-codes code { padding: 10px; border-radius: 10px; background: var(--surface-soft); color: var(--text); font-size: 15px; font-weight: 700; letter-spacing: .08em; text-align: center; user-select: all; }
+.code-input { letter-spacing: .2em; font-variant-numeric: tabular-nums; }
+.twofa-on svg, .offsite.ok svg { vertical-align: -2px; color: var(--lavender-deep); }
+.offsite.warning { color: var(--danger-text); }
+.offsite.warning svg { vertical-align: -2px; }
 .invite-code { margin: 6px 0 14px; padding: 18px; border-radius: 14px; background: var(--surface-soft); color: var(--lavender-deep); font-size: 30px; font-weight: 800; letter-spacing: .14em; text-align: center; font-variant-numeric: tabular-nums; user-select: all; }
 .invite-steps { margin: 0 0 6px; padding-left: 20px; color: var(--text-soft); font-size: 13px; line-height: 1.7; }
 .invite-steps strong { color: var(--text); }
@@ -996,6 +1017,9 @@ button.breakdown-detail-row:hover, button.breakdown-detail-row:focus-visible { b
   .qr-art { grid-template-columns: repeat(25, 5px); grid-template-rows: repeat(25, 5px); }
   .toast { bottom: calc(79px + env(safe-area-inset-bottom)); }
   .main-content.with-install-hint { padding-bottom: calc(330px + env(safe-area-inset-bottom)); }
+  .login-alert { flex-wrap: wrap; }
+  .login-alert-actions { width: 100%; }
+  .login-alert-actions .button { flex: 1; }
   .install-hint { left: 12px; right: 12px; bottom: calc(79px + env(safe-area-inset-bottom)); width: auto; }
 }
 

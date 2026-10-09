@@ -161,7 +161,7 @@ test('profiles keep a name and photo per person, and admins can edit or remove a
     const ana = store.addPerson('Ana');
     const anaScope = store.forPerson(ana.id);
     store.registerAccount(store.createInvite(ana.id).code, 'ana', 'clave-de-ana');
-    assert.deepEqual(store.getProfile(), { name: '', username: null, avatar: null });
+    assert.deepEqual(store.getProfile(), { name: '', username: null, twoFactor: false, recoveryLeft: 0, avatar: null });
     assert.equal(store.setName('Raúl Soto').name, 'Raúl Soto');
     assert.equal(anaScope.setName('Ana María').name, 'Ana María');
     assert.equal(store.listPeople()[0].name, 'Ana María');
@@ -183,6 +183,57 @@ test('profiles keep a name and photo per person, and admins can edit or remove a
     assert.equal(store.listPeople().length, 1);
     assert.ok(store.createInvite(ana.id).code);
     store.close();
+  } finally {
+    fs.rmSync(folder, { recursive: true, force: true });
+  }
+});
+
+test('two-step verification accepts each app code once and spends recovery codes', async () => {
+  const totp = require('../desktop/totp.cjs');
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'miplata-2fa-test-'));
+  try {
+    const store = await openStore(folder, initialState);
+    const { code } = store.createInvite('owner');
+    store.registerAccount(code, 'raul', 'clave-segura-1');
+    const secret = totp.newSecret();
+    const step = Math.floor(Date.now() / 30000);
+    assert.throws(() => store.enableTwoFactor('owner', secret, '000000'.replace(/./g, (d, i) => String((Number(totp.codeAt(secret, step)[i]) + 1) % 10))), /no coincide/);
+    const recovery = store.enableTwoFactor('owner', secret, totp.codeAt(secret, step));
+    assert.equal(recovery.length, 10);
+    assert.equal(store.accountFor('owner').twoFactor, true);
+    assert.equal(store.listPeople().length, 0);
+    // El mismo código no sirve dos veces; el siguiente sí.
+    assert.equal(store.checkSecondFactor('owner', totp.codeAt(secret, step)), null);
+    assert.equal(store.checkSecondFactor('owner', totp.codeAt(secret, step + 1)), 'app');
+    assert.equal(store.checkSecondFactor('owner', recovery[0].toLowerCase()), 'recovery');
+    assert.equal(store.checkSecondFactor('owner', recovery[0]), null);
+    assert.equal(store.recoveryCodesLeft('owner'), 9);
+    store.disableTwoFactor('owner');
+    assert.equal(store.accountFor('owner').twoFactor, false);
+    assert.equal(store.checkSecondFactor('owner', '123456'), 'none');
+    store.close();
+  } finally {
+    fs.rmSync(folder, { recursive: true, force: true });
+  }
+});
+
+test('the activity log keeps events and new-device alerts per person', () => {
+  const { openActivity } = require('../desktop/activity.cjs');
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'miplata-activity-log-test-'));
+  try {
+    let activity = openActivity(folder);
+    activity.log('login', { personId: 'owner', deviceId: 'a', ip: '190.22.10.5' });
+    const alert = activity.log('login', { personId: 'owner', deviceId: 'b', alert: true, empty: '' });
+    activity.log('login', { personId: 'p123456789', deviceId: 'c', alert: true });
+    assert.equal(activity.list(10)[0].personId, 'p123456789');
+    assert.equal('empty' in activity.list(10)[1], false);
+    assert.deepEqual(activity.alertsFor('owner', 'a').map((item) => item.id), [alert.id]);
+    assert.deepEqual(activity.alertsFor('owner', 'b'), []);
+    activity.dismiss('owner', alert.id);
+    activity = openActivity(folder);
+    assert.equal(activity.list(10).length, 3);
+    assert.deepEqual(activity.alertsFor('owner', 'a'), []);
+    assert.equal(activity.alertsFor('p123456789', 'x').length, 1);
   } finally {
     fs.rmSync(folder, { recursive: true, force: true });
   }

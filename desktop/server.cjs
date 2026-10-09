@@ -4,6 +4,8 @@ const path = require('node:path');
 const os = require('node:os');
 const crypto = require('node:crypto');
 const QRCode = require('qrcode');
+const { openActivity } = require('./activity.cjs');
+const totp = require('./totp.cjs');
 
 const PORT = 4174;
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json; charset=utf-8' };
@@ -63,6 +65,7 @@ function loginPage() {
   <form id="login" novalidate><h1>Iniciar sesión</h1><p>Entra una vez y este dispositivo quedará guardado como de confianza.</p>
   <label for="l-user">Usuario</label><input id="l-user" autocomplete="username" autocapitalize="none" spellcheck="false" required>
   <label for="l-pass">Contraseña</label><input id="l-pass" type="password" autocomplete="current-password" required>
+  <div id="l-code-box" hidden><label for="l-code">Código de verificación</label><input id="l-code" class="code" inputmode="numeric" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" placeholder="123456"><small class="hint">Los 6 dígitos de tu app de verificación, o uno de tus códigos de recuperación.</small></div>
   <div class="error" hidden></div><button type="submit">Entrar</button><button class="switch" type="button" data-show="register">¿Tienes un código de invitación? Crea tu cuenta</button></form>
   <form id="register" novalidate hidden><h1>Crear cuenta</h1><p>Usa el código de invitación que te dieron. Lo haces una sola vez.</p>
   <label for="r-code">Código de invitación</label><input id="r-code" class="code" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" placeholder="ABCD-1234" required>
@@ -75,8 +78,8 @@ function loginPage() {
   (function(){const key='miplata-install-hint-closed';const box=document.querySelector('.install');const ios=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);const app=navigator.standalone===true||matchMedia('(display-mode: standalone)').matches;let closed=false;try{closed=localStorage.getItem(key)==='1'}catch(e){}box.hidden=!ios||app||closed;box.querySelector('.x').onclick=()=>{box.hidden=true;try{localStorage.setItem(key,'1')}catch(e){}}})();
   const forms={login:document.getElementById('login'),register:document.getElementById('register')};
   document.querySelectorAll('[data-show]').forEach((button)=>button.onclick=()=>{for(const [name,form] of Object.entries(forms))form.hidden=name!==button.dataset.show;forms[button.dataset.show].querySelector('input').focus()});
-  async function send(form,url,body){const error=form.querySelector('.error');const submit=form.querySelector('button[type=submit]');error.hidden=true;submit.disabled=true;try{const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign(body,{device:/iPhone/i.test(navigator.userAgent)?'iPhone':/iPad/i.test(navigator.userAgent)?'iPad':/Android/i.test(navigator.userAgent)?'Android':/Mac/i.test(navigator.userAgent)?'Mac':/Windows/i.test(navigator.userAgent)?'PC con Windows':'Navegador'}))});const result=await response.json().catch(()=>({}));if(!response.ok)throw new Error(result.error||'No se pudo completar');location.replace('/')}catch(problem){error.textContent=problem.message;error.hidden=false;submit.disabled=false}}
-  forms.login.onsubmit=(event)=>{event.preventDefault();send(forms.login,'/api/login',{username:document.getElementById('l-user').value,password:document.getElementById('l-pass').value})};
+  async function send(form,url,body){const error=form.querySelector('.error');const submit=form.querySelector('button[type=submit]');error.hidden=true;submit.disabled=true;try{const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign(body,{device:/iPhone/i.test(navigator.userAgent)?'iPhone':/iPad/i.test(navigator.userAgent)?'iPad':/Android/i.test(navigator.userAgent)?'Android':/Mac/i.test(navigator.userAgent)?'Mac':/Windows/i.test(navigator.userAgent)?'PC con Windows':'Navegador'}))});const result=await response.json().catch(()=>({}));if(result.needCode){const box=document.getElementById('l-code-box');box.hidden=false;document.getElementById('l-code').focus()}if(!response.ok)throw new Error(result.error||'No se pudo completar');if(result.needCode){submit.disabled=false;return}location.replace('/')}catch(problem){error.textContent=problem.message;error.hidden=false;submit.disabled=false}}
+  forms.login.onsubmit=(event)=>{event.preventDefault();send(forms.login,'/api/login',{username:document.getElementById('l-user').value,password:document.getElementById('l-pass').value,code:document.getElementById('l-code').value})};
   forms.register.onsubmit=(event)=>{event.preventDefault();const pass=document.getElementById('r-pass').value;const user=document.getElementById('r-user').value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().replace(/\s+/g,' ').toLowerCase();const problem=user.length<3||user.length>30||!/^[a-z0-9._-]+( [a-z0-9._-]+)*$/.test(user)?'El usuario debe tener entre 3 y 30 letras o números. Puede llevar espacios, puntos o guiones.':pass.length<8?'La contraseña debe tener al menos 8 caracteres.':pass!==document.getElementById('r-pass2').value?'Las contraseñas no coinciden.':'';if(problem){const error=forms.register.querySelector('.error');error.textContent=problem;error.hidden=false;return}send(forms.register,'/api/register',{code:document.getElementById('r-code').value,username:document.getElementById('r-user').value,password:pass})};
   // Botón con forma de ojo para ver lo que se escribe en cada contraseña.
   const eye='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
@@ -149,16 +152,40 @@ function startServer(store, root, onPending, options = {}) {
   const adminUnlocked = new Map();
   const ADMIN_UNLOCK_MS = 10 * 60 * 1000;
 
-  // Dónde se conectó cada dispositivo por última vez: país (si hay base de países), Tailscale o red local.
-  function describeDevice(item) {
-    const address = String(item.lastIp || '').replace(/^::ffff:/i, '');
+  const activity = options.activity || openActivity(path.dirname(store.dbPath));
+  // Estado de la última copia enviada fuera del servidor (lo escribe desktop/respaldo.cjs).
+  function readOffsiteStatus() {
+    try { return JSON.parse(fs.readFileSync(path.join(path.dirname(store.dbPath), 'respaldo-externo.json'), 'utf8')); } catch (error) { return null; }
+  }
+  // Claves de verificación en dos pasos recién creadas, a la espera de que la persona confirme el primer código.
+  const pendingTwoFactor = new Map();
+
+  // Dónde está una IP: país (si hay base de países), Tailscale o red local.
+  function place(ip) {
+    const address = String(ip || '').replace(/^::ffff:/i, '');
     const local = /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|127\.|::1$|f[cd][0-9a-f]{2}:|fe80:)/i.test(address);
-    return { ...item, network: !address ? null : isTailscaleAddress(address) ? 'tailscale' : local ? 'local' : 'internet', country: address && options.geo ? options.geo.lookup(address) : null };
+    return { network: !address ? null : isTailscaleAddress(address) ? 'tailscale' : local ? 'local' : 'internet', country: address && options.geo ? options.geo.lookup(address) : null };
+  }
+  function describeDevice(item) { return { ...item, ...place(item.lastIp) }; }
+  function describeEvent(event) { return { ...event, ...place(event.ip) }; }
+
+  function personLabel(personId) {
+    return personId === 'owner' ? (store.getProfile().name || 'Dueño') : store.personName(personId) || 'Persona eliminada';
+  }
+  function record(kind, ip, personId, fields = {}) {
+    try {
+      return activity.log(kind, { ip: String(ip || '').replace(/^::ffff:/i, '') || undefined, personId, name: personId ? personLabel(personId) : undefined, username: personId ? store.accountFor(personId)?.username : undefined, ...fields });
+    } catch (error) { console.warn('No se pudo anotar la actividad', error); return null; }
   }
 
-  function startSession(res, personId, deviceName, secure) {
+  function startSession(res, personId, deviceName, secure, ip, kind) {
     const token = crypto.randomBytes(32).toString('base64url');
-    store.addDevice(DEVICE_NAMES.includes(deviceName) ? deviceName : 'Navegador', token, personId);
+    const name = DEVICE_NAMES.includes(deviceName) ? deviceName : 'Navegador';
+    const hadDevices = store.listDevices().some((item) => item.personId === personId);
+    const deviceId = store.addDevice(name, token, personId);
+    store.touchDevice(deviceId, ip);
+    // Si la cuenta ya se usaba en otro dispositivo, sus otros dispositivos verán un aviso de "nuevo inicio de sesión".
+    record(kind, ip, personId, { device: name, deviceId, alert: hadDevices || undefined });
     // Dispositivo de confianza: la sesión dura un año o hasta que se revoque desde la PC.
     return json(res, 200, { ok: true }, { 'Set-Cookie': 'mg_session=' + token + '; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000' + secure });
   }
@@ -225,20 +252,25 @@ function startServer(store, root, onPending, options = {}) {
         if (limiter.locked(keys)) return json(res, 429, { error: limiter.message(keys) });
         if (pathname === '/api/login') {
           const personId = store.verifyLogin(body.username, body.password);
-          if (!personId) { limiter.fail(keys); return json(res, 401, { error: 'Usuario o contraseña incorrectos' }); }
+          if (!personId) { limiter.fail(keys); record('login-failed', clientAddress, null, { username: String(body.username || '').trim().slice(0, 40) }); return json(res, 401, { error: 'Usuario o contraseña incorrectos' }); }
+          // Con verificación en dos pasos, la contraseña sola no basta: se pide el código de la app.
+          if (store.accountFor(personId).twoFactor) {
+            if (!String(body.code || '').trim()) return json(res, 200, { needCode: true });
+            if (!store.checkSecondFactor(personId, body.code)) { limiter.fail(keys); record('code-failed', clientAddress, personId); return json(res, 401, { error: 'El código no es correcto o ya se usó', needCode: true }); }
+          }
           limiter.clear(keys);
-          return startSession(res, personId, body.device, secure);
+          return startSession(res, personId, body.device, secure, clientAddress, 'login');
         }
         let personId;
         // Solo cuenta como intento fallido un código equivocado; un usuario o contraseña que no cumple las reglas no bloquea.
-        try { personId = store.registerAccount(body.code, body.username, body.password); } catch (error) { if (error.badInvite) limiter.fail(keys.slice(0, 1)); return json(res, 400, { error: error.message }); }
+        try { personId = store.registerAccount(body.code, body.username, body.password); } catch (error) { if (error.badInvite) { limiter.fail(keys.slice(0, 1)); record('invite-failed', clientAddress, null); } return json(res, 400, { error: error.message }); }
         limiter.clear(keys);
-        return startSession(res, personId, body.device, secure);
+        return startSession(res, personId, body.device, secure, clientAddress, 'register');
       }
 
       if (pathname.startsWith('/api/') && !authorized) return json(res, 401, { error: 'Inicia sesión para continuar' });
       if (pathname === '/api/logout' && req.method === 'POST') {
-        if (device) store.revokeDevice(device.id);
+        if (device) { store.revokeDevice(device.id); record('logout', clientAddress, personId, { device: device.name }); }
         return json(res, 200, { ok: true }, { 'Set-Cookie': 'mg_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0' + secure });
       }
       const own = authorized ? store.forPerson(personId) : null;
@@ -298,6 +330,55 @@ function startServer(store, root, onPending, options = {}) {
         try { changed = own.changePassword(body.current, body.password); } catch (error) { return json(res, 400, { error: error.message }); }
         if (!changed) { limiter.fail(keys); return json(res, 400, { error: 'La contraseña actual no es correcta' }); }
         limiter.clear(keys);
+        record('password-changed', clientAddress, personId);
+        return json(res, 200, { ok: true });
+      }
+
+      // Verificación en dos pasos de la propia cuenta.
+      if (pathname === '/api/profile/2fa/start' && req.method === 'POST') {
+        const account = store.accountFor(personId);
+        if (!account) return json(res, 400, { error: 'Primero crea tu usuario con una invitación' });
+        if (account.twoFactor) return json(res, 400, { error: 'La verificación en dos pasos ya está activa' });
+        const secret = totp.newSecret();
+        pendingTwoFactor.set(personId, { secret, until: Date.now() + 10 * 60 * 1000 });
+        const link = totp.otpauthUrl(secret, account.username + (publicHost ? ' (' + publicHost + ')' : ''));
+        const qr = await QRCode.toDataURL(link, { width: 220, margin: 2, color: { dark: '#262536', light: '#fdfbf7' } });
+        return json(res, 200, { secret, link, qr });
+      }
+      if (pathname === '/api/profile/2fa/enable' && req.method === 'POST') {
+        const body = await readBody(req);
+        const started = pendingTwoFactor.get(personId);
+        if (!started || started.until < Date.now()) return json(res, 400, { error: 'Pasó mucho rato. Vuelve a empezar la activación.' });
+        let codes;
+        try { codes = store.enableTwoFactor(personId, started.secret, body.code); } catch (error) { return json(res, 400, { error: error.message }); }
+        pendingTwoFactor.delete(personId);
+        record('twofa-on', clientAddress, personId);
+        return json(res, 200, { recoveryCodes: codes });
+      }
+      if (pathname === '/api/profile/2fa/disable' && req.method === 'POST') {
+        const body = await readBody(req);
+        const keys = ['ip:' + clientAddress, 'person:' + personId];
+        if (limiter.locked(keys)) return json(res, 429, { error: limiter.message(keys) });
+        const account = store.accountFor(personId);
+        if (!account?.twoFactor) return json(res, 400, { error: 'La verificación en dos pasos no está activa' });
+        if (store.verifyLogin(account.username, body.password) !== personId || !store.checkSecondFactor(personId, body.code)) { limiter.fail(keys); return json(res, 400, { error: 'La contraseña o el código no son correctos' }); }
+        limiter.clear(keys);
+        store.disableTwoFactor(personId);
+        record('twofa-off', clientAddress, personId);
+        return json(res, 200, { ok: true });
+      }
+
+      // Avisos de inicio de sesión desde un dispositivo nuevo.
+      if (pathname === '/api/alerts' && req.method === 'GET') return json(res, 200, activity.alertsFor(personId, device?.id || null).slice(0, 5).map(describeEvent));
+      if ((pathname === '/api/alerts/dismiss' || pathname === '/api/alerts/reject') && req.method === 'POST') {
+        const body = await readBody(req);
+        const alert = activity.alertById(personId, String(body.id || ''));
+        if (!alert) return json(res, 404, { error: 'Aviso no encontrado' });
+        if (pathname === '/api/alerts/reject') {
+          const target = store.listDevices().find((item) => item.id === alert.deviceId && item.personId === personId);
+          if (target) { store.revokeDevice(target.id); record('device-revoked', clientAddress, personId, { device: target.name, detail: 'No fui yo' }); }
+        }
+        activity.dismiss(personId, alert.id);
         return json(res, 200, { ok: true });
       }
 
@@ -306,8 +387,11 @@ function startServer(store, root, onPending, options = {}) {
         const body = await readBody(req);
         const keys = ['ip:' + (proxied ? String(req.headers['x-miplata-client'] || 'internet') : String(req.socket.remoteAddress || '')), 'person:owner'];
         if (limiter.locked(keys)) return json(res, 429, { error: limiter.message(keys) });
-        if (store.verifyLogin(store.accountFor('owner').username, body.password) !== 'owner') { limiter.fail(keys); return json(res, 400, { error: 'La contraseña no es correcta' }); }
+        const ownerAccount = store.accountFor('owner');
+        if (store.verifyLogin(ownerAccount.username, body.password) !== 'owner') { limiter.fail(keys); record('admin-unlock-failed', clientAddress, 'owner'); return json(res, 400, { error: 'La contraseña no es correcta' }); }
+        if (ownerAccount.twoFactor && !store.checkSecondFactor('owner', body.code)) { limiter.fail(keys); record('admin-unlock-failed', clientAddress, 'owner', { detail: 'Código' }); return json(res, 400, { error: 'El código de verificación no es correcto o ya se usó' }); }
         limiter.clear(keys);
+        record('admin-unlock', clientAddress, 'owner', { device: device.name });
         adminUnlocked.set(device.id, Date.now() + ADMIN_UNLOCK_MS);
         return json(res, 200, { ok: true });
       }
@@ -322,31 +406,46 @@ function startServer(store, root, onPending, options = {}) {
           const target = store.forPerson(String(body.personId || ''));
           if (body.name !== undefined && String(body.name).trim()) target.setName(body.name);
           if (body.username !== undefined && store.accountFor(target.personId)) store.setUsername(target.personId, body.username);
+          record('person-edited', clientAddress, target.personId, { by: 'admin' });
           return json(res, 200, target.getProfile());
         } catch (error) { return json(res, 400, { error: error.message }); }
       }
       if (pathname === '/api/accounts/remove' && req.method === 'POST') {
         const body = await readBody(req);
+        const removedUser = store.accountFor(String(body.personId || ''))?.username;
         try { store.deleteAccount(String(body.personId || '')); } catch (error) { return json(res, 404, { error: error.message }); }
+        record('account-deleted', clientAddress, String(body.personId), { username: removedUser, by: 'admin' });
         return json(res, 200, { ok: true });
       }
-      if (pathname === '/api/desktop-info' && req.method === 'GET') return json(res, 200, { networks: networks(), devices: store.listDevices().map(describeDevice), people: store.listPeople(), ownerAccount: store.accountFor('owner')?.username || null, pending: [...pending.entries()].filter(([, item]) => item.status === 'pending' && Date.now() - item.createdAt < 300000).map(([id, item]) => ({ id, name: item.name, personId: item.personId, personName: store.personName(item.personId) })), backupDir: store.backupDir, lastBackup: store.lastBackupAt() });
+      if (pathname === '/api/desktop-info' && req.method === 'GET') return json(res, 200, { networks: networks(), devices: store.listDevices().map(describeDevice), people: store.listPeople(), ownerAccount: store.accountFor('owner')?.username || null, ownerTwoFactor: Boolean(store.accountFor('owner')?.twoFactor), offsite: readOffsiteStatus(), pending: [...pending.entries()].filter(([, item]) => item.status === 'pending' && Date.now() - item.createdAt < 300000).map(([id, item]) => ({ id, name: item.name, personId: item.personId, personName: store.personName(item.personId) })), backupDir: store.backupDir, lastBackup: store.lastBackupAt() });
       if (pathname === '/api/invites' && req.method === 'POST') {
         const body = await readBody(req);
-        try { return json(res, 200, store.createInvite(String(body.personId || ''))); } catch (error) { return json(res, 400, { error: error.message }); }
+        try { const invite = store.createInvite(String(body.personId || '')); record('invite', clientAddress, String(body.personId), { by: 'admin' }); return json(res, 200, invite); } catch (error) { return json(res, 400, { error: error.message }); }
       }
       if (pathname === '/api/people/password' && req.method === 'POST') {
         const body = await readBody(req);
         try { store.setPassword(String(body.personId || ''), body.password); } catch (error) { return json(res, 400, { error: error.message }); }
+        record('password-reset', clientAddress, String(body.personId), { by: 'admin' });
         return json(res, 200, { ok: true });
       }
+      if (pathname === '/api/people/2fa/remove' && req.method === 'POST') {
+        const body = await readBody(req);
+        const target = String(body.personId || '');
+        if (!store.accountFor(target)?.twoFactor) return json(res, 400, { error: 'Esa cuenta no tiene verificación en dos pasos' });
+        store.disableTwoFactor(target);
+        record('twofa-off', clientAddress, target, { by: 'admin' });
+        return json(res, 200, { ok: true });
+      }
+      if (pathname === '/api/activity' && req.method === 'GET') return json(res, 200, activity.list(Number(url.searchParams.get('limit')) || 100).map(describeEvent));
       if (pathname === '/api/people' && req.method === 'POST') {
         const body = await readBody(req);
-        try { return json(res, 200, store.addPerson(body.name)); } catch (error) { return json(res, 400, { error: error.message }); }
+        try { const person = store.addPerson(body.name); record('person-added', clientAddress, person.id, { by: 'admin' }); return json(res, 200, person); } catch (error) { return json(res, 400, { error: error.message }); }
       }
       if (pathname === '/api/people/remove' && req.method === 'POST') {
         const body = await readBody(req);
+        const removedName = store.personName(String(body.id || ''));
         try { store.removePerson(String(body.id || '')); } catch (error) { return json(res, 404, { error: error.message }); }
+        record('person-removed', clientAddress, null, { name: removedName, by: 'admin' });
         for (const [id, item] of pending) if (item.personId === body.id) pending.delete(id);
         if (pairPerson === body.id) pairToken = null;
         return json(res, 200, { ok: true });
@@ -372,7 +471,10 @@ function startServer(store, root, onPending, options = {}) {
         if (!item || item.status !== 'pending') return json(res, 404, { error: 'Solicitud vencida' });
         if (body.approve === true) {
           item.token = crypto.randomBytes(32).toString('base64url');
-          try { store.addDevice(item.name, item.token, item.personId); } catch (error) { pending.delete(body.id); return json(res, 404, { error: error.message }); }
+          const hadDevices = store.listDevices().some((existing) => existing.personId === item.personId);
+          let deviceId;
+          try { deviceId = store.addDevice(item.name, item.token, item.personId); } catch (error) { pending.delete(body.id); return json(res, 404, { error: error.message }); }
+          record('pair', clientAddress, item.personId, { device: item.name, deviceId, alert: hadDevices || undefined, by: 'admin' });
           item.status = 'approved';
           pairToken = null;
         } else item.status = 'denied';
@@ -380,7 +482,9 @@ function startServer(store, root, onPending, options = {}) {
       }
       if (pathname === '/api/devices/revoke' && req.method === 'POST') {
         const body = await readBody(req);
+        const revoked = store.listDevices().find((item) => item.id === String(body.id || ''));
         store.revokeDevice(String(body.id || ''));
+        if (revoked) record('device-revoked', clientAddress, revoked.personId, { device: revoked.name, by: 'admin' });
         return json(res, 200, { ok: true });
       }
       if (pathname === '/api/export' && req.method === 'GET') {

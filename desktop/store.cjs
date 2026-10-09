@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const totp = require('./totp.cjs');
 const initSqlJs = require('sql.js');
 const categoryIcons = require('../category-icons.js');
 
@@ -199,6 +200,13 @@ async function openStore(userDataPath, initialStatePath) {
   db.run('CREATE TABLE IF NOT EXISTS accounts (person_id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, created_at TEXT NOT NULL)');
   db.run('CREATE TABLE IF NOT EXISTS profiles (person_id TEXT PRIMARY KEY, display_name TEXT)');
   db.run('CREATE TABLE IF NOT EXISTS invites (code_hash TEXT PRIMARY KEY, person_id TEXT NOT NULL, expires_at INTEGER NOT NULL)');
+  // Verificación en dos pasos: clave TOTP, último paso usado (para no aceptar el mismo código dos veces) y códigos de recuperación.
+  const accountColumns = db.exec('PRAGMA table_info(accounts)')[0].values.map((row) => row[1]);
+  if (!accountColumns.includes('totp_secret')) {
+    db.run('ALTER TABLE accounts ADD COLUMN totp_secret TEXT');
+    db.run('ALTER TABLE accounts ADD COLUMN totp_last_step INTEGER');
+    db.run('ALTER TABLE accounts ADD COLUMN recovery_hashes TEXT');
+  }
   const deviceColumns = db.exec('PRAGMA table_info(devices)')[0].values.map((row) => row[1]);
   if (!deviceColumns.includes('person_id')) db.run("ALTER TABLE devices ADD COLUMN person_id TEXT NOT NULL DEFAULT 'owner'");
 
@@ -408,7 +416,8 @@ async function openStore(userDataPath, initialStatePath) {
     function getProfile() {
       const name = owner ? one('SELECT display_name FROM profiles WHERE person_id = ?', [OWNER])?.display_name || '' : personName(personId) || '';
       const avatar = avatarFile();
-      return { name, username: accountFor(personId)?.username || null, avatar: avatar ? Math.round(fs.statSync(avatar.file).mtimeMs) : null };
+      const account = accountFor(personId);
+      return { name, username: account?.username || null, twoFactor: Boolean(account?.twoFactor), recoveryLeft: account?.twoFactor ? recoveryCodesLeft(personId) : 0, avatar: avatar ? Math.round(fs.statSync(avatar.file).mtimeMs) : null };
     }
 
     function setName(value) {
@@ -455,7 +464,7 @@ async function openStore(userDataPath, initialStatePath) {
   }
 
   function listPeople() {
-    return all('SELECT people.id, people.name, people.created_at, accounts.username FROM people LEFT JOIN accounts ON accounts.person_id = people.id ORDER BY people.created_at').map(([id, name, createdAt, username]) => ({ id, name, createdAt, username: username || null }));
+    return all('SELECT people.id, people.name, people.created_at, accounts.username, accounts.totp_secret FROM people LEFT JOIN accounts ON accounts.person_id = people.id ORDER BY people.created_at').map(([id, name, createdAt, username, secret]) => ({ id, name, createdAt, username: username || null, twoFactor: Boolean(secret) }));
   }
 
   function addPerson(name) {
@@ -487,7 +496,54 @@ async function openStore(userDataPath, initialStatePath) {
   }
 
   function accountFor(personId) {
-    return one('SELECT username, created_at FROM accounts WHERE person_id = ?', [personId]);
+    const account = one('SELECT username, created_at, totp_secret FROM accounts WHERE person_id = ?', [personId]);
+    return account ? { username: account.username, created_at: account.created_at, twoFactor: Boolean(account.totp_secret) } : null;
+  }
+
+  function newRecoveryCode() {
+    const raw = Array.from(crypto.randomBytes(8), (byte) => INVITE_ALPHABET[byte % INVITE_ALPHABET.length]).join('');
+    return raw.slice(0, 4) + '-' + raw.slice(4);
+  }
+
+  // Activa la verificación en dos pasos si el código de la app coincide; devuelve 10 códigos de recuperación de un solo uso.
+  function enableTwoFactor(personId, secret, code) {
+    if (!accountFor(personId)) throw new Error('Primero crea tu usuario');
+    const step = totp.matchStep(secret, code);
+    if (step === null) throw new Error('El código no coincide. Revisa que la hora del celular esté bien y vuelve a intentarlo.');
+    const codes = Array.from({ length: 10 }, newRecoveryCode);
+    db.run('UPDATE accounts SET totp_secret = ?, totp_last_step = ?, recovery_hashes = ? WHERE person_id = ?', [secret, step, JSON.stringify(codes.map(hashInvite)), personId]);
+    persist();
+    return codes;
+  }
+
+  function disableTwoFactor(personId) {
+    db.run('UPDATE accounts SET totp_secret = NULL, totp_last_step = NULL, recovery_hashes = NULL WHERE person_id = ?', [personId]);
+    persist();
+  }
+
+  // Revisa el segundo paso: un código de la app (una sola vez cada uno) o un código de recuperación (se gasta al usarlo).
+  function checkSecondFactor(personId, code) {
+    const account = one('SELECT totp_secret, totp_last_step, recovery_hashes FROM accounts WHERE person_id = ?', [personId]);
+    if (!account || !account.totp_secret) return 'none';
+    const step = totp.matchStep(account.totp_secret, code);
+    if (step !== null && step > Number(account.totp_last_step || 0)) {
+      db.run('UPDATE accounts SET totp_last_step = ? WHERE person_id = ?', [step, personId]);
+      persist();
+      return 'app';
+    }
+    const hashes = JSON.parse(account.recovery_hashes || '[]');
+    const hash = normalizeInvite(code).length === 8 ? hashInvite(code) : null;
+    if (hash && hashes.includes(hash)) {
+      db.run('UPDATE accounts SET recovery_hashes = ? WHERE person_id = ?', [JSON.stringify(hashes.filter((item) => item !== hash)), personId]);
+      persist();
+      return 'recovery';
+    }
+    return null;
+  }
+
+  function recoveryCodesLeft(personId) {
+    const account = one('SELECT recovery_hashes FROM accounts WHERE person_id = ?', [personId]);
+    return account && account.recovery_hashes ? JSON.parse(account.recovery_hashes).length : 0;
   }
 
   // Código de un solo uso para que una persona (o el dueño) cree su usuario y contraseña.
@@ -622,7 +678,7 @@ async function openStore(userDataPath, initialStatePath) {
     persist();
   }
 
-  return { ...ownerScope, forPerson: scope, listPeople, addPerson, removePerson, personName, accountFor, createInvite, registerAccount, verifyLogin, setPassword, setUsername, deleteAccount, addDevice, deviceForToken, touchDevice, listDevices, revokeDevice, lastBackupAt, backupDir, dbPath, backupNow, close: () => { if (Object.keys(activity).length) writeActivity(); db.close(); } };
+  return { ...ownerScope, forPerson: scope, listPeople, addPerson, removePerson, personName, accountFor, enableTwoFactor, disableTwoFactor, checkSecondFactor, recoveryCodesLeft, createInvite, registerAccount, verifyLogin, setPassword, setUsername, deleteAccount, addDevice, deviceForToken, touchDevice, listDevices, revokeDevice, lastBackupAt, backupDir, dbPath, backupNow, close: () => { if (Object.keys(activity).length) writeActivity(); db.close(); } };
 }
 
 module.exports = { openStore, validateState, OWNER };

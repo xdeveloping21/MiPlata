@@ -566,11 +566,14 @@ function profileModal() {
     '<label class="field-label" for="own-new-password">Nueva contraseña (mínimo 8 caracteres)</label><input class="text-input" id="own-new-password" name="password" type="password" autocomplete="new-password" required />' +
     '<label class="field-label" for="own-new-password-2">Repítela</label><input class="text-input" id="own-new-password-2" name="password2" type="password" autocomplete="new-password" required />' +
     '<div class="dialog-actions"><button class="button button-outline" type="submit">Cambiar contraseña</button></div></form>' : '';
+  const twoFactor = profile.username ? '<section class="profile-section"><h3>Verificación en dos pasos</h3>' + (profile.twoFactor
+    ? '<p class="settings-note twofa-on">' + icon('check', 15) + ' Activa. Al entrar en un dispositivo nuevo te pediremos el código de tu app. Te quedan ' + profile.recoveryLeft + ' códigos de recuperación.</p><div class="dialog-actions"><button class="button button-outline" type="button" data-action="twofa-disable">Desactivar</button></div>'
+    : '<p class="settings-note">Además de tu contraseña, te pediremos un código de 6 dígitos de una app como Google Authenticator o la app Contraseñas del iPhone. Así, aunque alguien sepa tu contraseña, no podrá entrar.</p><div class="dialog-actions"><button class="button button-primary" type="button" data-action="twofa-start">Activar</button></div>') + '</section>' : '';
   return sideDialog('TU PERFIL', 'Perfil', '<div class="profile-photo">' + avatarMarkup('large') + '<div><label class="button button-outline" for="profile-photo-file">' + icon('image', 16) + ' ' + (profile.avatar ? 'Cambiar foto' : 'Subir foto') + '</label>' +
       (profile.avatar ? '<button class="text-button" type="button" data-action="remove-avatar">Quitar foto</button>' : '') + '<input id="profile-photo-file" type="file" accept="image/*" hidden /></div></div>' +
     '<form id="profile-name-form" class="profile-section" novalidate><label class="field-label" for="profile-name">Tu nombre</label><input class="text-input" id="profile-name" name="name" maxlength="40" value="' + escapeHtml(profile.name || '') + '" placeholder="Ejemplo: Raúl" required />' +
       (profile.username ? '<p class="settings-note">Tu usuario para entrar: <strong>@' + escapeHtml(profile.username) + '</strong></p>' : '') +
-      '<div class="dialog-actions"><button class="button button-primary" type="submit">Guardar nombre</button></div></form>' + passwordForm +
+      '<div class="dialog-actions"><button class="button button-primary" type="submit">Guardar nombre</button></div></form>' + passwordForm + twoFactor +
     (!DESKTOP ? '<button class="button button-danger full-width profile-logout" type="button" data-action="logout">' + icon('close', 16) + '<span>Cerrar sesión en este dispositivo</span></button>' : ''));
 }
 
@@ -712,6 +715,67 @@ function recurringModal() {
     '<div class="dialog-actions"><button class="button button-primary" type="submit">' + icon('plus', 17) + ' Agregar pago fijo</button></div></form>');
 }
 
+// Avisos de inicio de sesión desde otro dispositivo y registro de actividad (este último, solo para el administrador).
+let loginAlerts = [];
+let activityLog = null;
+async function loadAlerts() {
+  if (!LIVE) return;
+  try {
+    const response = await fetch('/api/alerts', { cache: 'no-store' });
+    if (!response.ok) return;
+    const next = await response.json();
+    if (JSON.stringify(next) !== JSON.stringify(loginAlerts)) { loginAlerts = next; if (!modal) render(); }
+  } catch (error) { /* sin conexión: se reintenta más tarde */ }
+}
+async function loadActivity(limit) {
+  if (!LIVE || !ADMIN) return;
+  try {
+    const response = await fetch('/api/activity?limit=' + (limit || 30), { cache: 'no-store' });
+    if (!response.ok) return;
+    activityLog = await response.json();
+    if (route === 'settings' && !modal) render();
+  } catch (error) { /* sin conexión */ }
+}
+function placeLabel(item) {
+  const place = item.network === 'tailscale' ? 'Tailscale' : item.network === 'local' ? 'Red local' : item.country ? countryLabel(item.country) : item.ip ? 'País desconocido' : '';
+  return [escapeHtml(place), item.ip ? escapeHtml(item.ip) : '', item.at ? timeAgo(item.at) : ''].filter(Boolean).join(' · ');
+}
+function alertsBanner() {
+  if (!loginAlerts.length) return '';
+  return loginAlerts.map(function (item) {
+    return '<section class="login-alert" role="status">' + icon('info', 20) + '<div><strong>Nuevo inicio de sesión en tu cuenta</strong><p>' + escapeHtml(item.device || 'Un dispositivo') + ' · ' + placeLabel(item) + '</p></div>' +
+      '<div class="login-alert-actions"><button class="button button-outline" type="button" data-alert-ok="' + escapeHtml(item.id) + '">Fui yo</button><button class="button button-danger" type="button" data-alert-reject="' + escapeHtml(item.id) + '">No fui yo</button></div></section>';
+  }).join('');
+}
+function answerAlert(id, reject) {
+  apiPost(reject ? '/api/alerts/reject' : '/api/alerts/dismiss', { id: id }).then(function () {
+    loginAlerts = loginAlerts.filter(function (item) { return item.id !== id; });
+    if (reject) { modal = { type: 'profile' }; render(); toast('Cerramos esa sesión. Cambia tu contraseña por seguridad.'); document.getElementById('current-password')?.focus(); }
+    else render();
+  }).catch(function (error) { toast(error.message); });
+}
+const ACTIVITY_LABELS = {
+  login: 'inició sesión', register: 'creó su cuenta', logout: 'cerró sesión', pair: 'conectó un dispositivo con QR',
+  'login-failed': 'contraseña incorrecta', 'code-failed': 'código de verificación incorrecto', 'invite-failed': 'código de invitación incorrecto',
+  'device-revoked': 'perdió el acceso de un dispositivo', 'password-changed': 'cambió su contraseña', 'password-reset': 'recibió una contraseña nueva del administrador',
+  'twofa-on': 'activó la verificación en dos pasos', 'twofa-off': 'desactivó la verificación en dos pasos', 'account-deleted': 'perdió su cuenta (se borró el usuario)',
+  'person-added': '· nueva persona', 'person-removed': '· persona eliminada', 'person-edited': '· nombre o usuario editado', invite: '· invitación creada',
+  'admin-unlock': 'confirmó su contraseña para administrar', 'admin-unlock-failed': 'falló al confirmar su contraseña para administrar',
+};
+const ACTIVITY_WARNINGS = ['login-failed', 'code-failed', 'invite-failed', 'admin-unlock-failed'];
+function activityRow(item) {
+  const who = item.name || (item.username ? '@' + item.username : 'Alguien');
+  const what = (ACTIVITY_LABELS[item.kind] || item.kind) + (item.kind === 'login-failed' && item.username ? ' (usuario "' + item.username + '")' : '') + (item.by === 'admin' && !/administrador/.test(ACTIVITY_LABELS[item.kind] || '') ? ', por el administrador' : '') + (item.device ? ' · ' + item.device : '') + (item.detail === 'No fui yo' ? ' · marcó "No fui yo"' : '');
+  return '<div class="activity-row' + (ACTIVITY_WARNINGS.includes(item.kind) ? ' warning' : '') + '"><span class="activity-dot"></span><div><p><strong>' + escapeHtml(who) + '</strong> ' + escapeHtml(what) + '</p><small>' + placeLabel(item) + '</small></div></div>';
+}
+function activityPanel() {
+  if (!ADMIN) return '';
+  if (activityLog === null) { loadActivity(); return ''; }
+  return '<section class="panel settings-panel activity-panel"><div class="settings-heading"><span class="settings-icon">' + icon('eye', 20) + '</span><div><h2>Actividad reciente</h2><p>Inicios de sesión, intentos fallidos y cambios en las cuentas. Solo tú la ves.</p></div></div>' +
+    (activityLog.length ? '<div class="activity-list">' + activityLog.map(activityRow).join('') + '</div>' : '<p class="settings-note">Todavía no hay actividad registrada.</p>') +
+    (activityLog.length >= 30 && activityLog.length < 200 ? '<button class="setting-action" data-action="load-activity" type="button"><span>' + icon('list', 18) + ' Ver más</span>' + icon('arrowRight', 18) + '</button>' : '') + '</section>';
+}
+
 // En iPhone no se puede agregar la app al inicio desde la página: solo mostramos cómo hacerlo en Safari.
 const INSTALL_HINT_KEY = 'miplata-install-hint-closed';
 const IOS_DEVICE = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -742,7 +806,7 @@ function shell(content) {
           navItem('home', 'Inicio', 'home') + navItem('transactions', 'Movimientos', 'list') + navItem('categories', 'Categorías', 'categories') + navItem('savings', 'Ahorros', 'savings') + navItem('settings', 'Ajustes', 'settings') +
         '</nav>' + sidebarWidgets() + '<div class="sidebar-foot">' + (LIVE && DESKTOP ? sideStatusMarkup() : '<span class="demo-status"><span class="status-dot"></span> ' + (LIVE ? 'Datos guardados en tu PC' : 'Modo demostración') + '</span><small>' + (LIVE ? 'Se sincronizan con tus celulares vinculados.' : 'Los cambios solo viven en este navegador.') + '</small>') + '</div></aside>' +
       '<div class="app-body"><div class="mobile-topbar"><div class="mobile-wordmark"><span class="brand-mark"><img src="assets/miplata-logo.png" alt="" width="29" height="29" style="display:block;width:29px;height:29px;max-width:29px;max-height:29px" /></span><strong>MiPlata</strong></div><div class="mobile-actions"><button class="icon-button" data-action="toggle-theme" aria-label="Cambiar tema" type="button">' + icon(themeIcon, 20) + '</button>' + (LIVE && !DESKTOP ? '<button class="icon-button" data-action="logout" type="button" aria-label="Cerrar sesión" title="Cerrar sesión">' + icon('logout', 19) + '</button>' : '') + (LIVE ? '<button class="mobile-avatar" data-action="open-profile" type="button" aria-label="Tu perfil">' + avatarMarkup('small') + '</button>' : '') + '</div></div>' +
-        '<main class="main-content' + (hint ? ' with-install-hint' : '') + '" id="main-content">' + content + '</main></div>' +
+        '<main class="main-content' + (hint ? ' with-install-hint' : '') + '" id="main-content">' + alertsBanner() + content + '</main></div>' +
       '<nav class="mobile-nav" aria-label="Principal">' +
         navItem('home', 'Inicio', 'home') + navItem('transactions', 'Movimientos', 'list') + navItem('categories', 'Categorías', 'categories') + navItem('savings', 'Ahorros', 'savings') + navItem('settings', 'Ajustes', 'settings') +
       '</nav>' +
@@ -1074,6 +1138,14 @@ function deviceWhere(device) {
   return [escapeHtml(place), device.lastIp ? escapeHtml(device.lastIp) : '', timeAgo(device.lastSeen)].filter(Boolean).join(' · ');
 }
 
+// Copia cifrada fuera del servidor (deploy/respaldo.sh): cuándo salió la última y si falló.
+function offsiteNote() {
+  const status = desktopInfo.offsite;
+  if (!status) return DESKTOP ? '' : '<p class="settings-note">Exportar y restaurar se hacen desde la PC.</p>';
+  if (status.ok) return '<p class="settings-note offsite ok">' + icon('check', 15) + ' Última copia fuera del servidor: ' + escapeHtml(timeAgo(status.at)) + (status.destino ? ' en ' + escapeHtml(status.destino) : '') + '.</p>';
+  return '<p class="settings-note offsite warning">' + icon('info', 15) + ' La última copia fuera del servidor falló ' + escapeHtml(timeAgo(status.at)) + ': ' + escapeHtml(status.error || 'error desconocido') + '</p>';
+}
+
 function renderSettings() {
   if (LIVE) {
     const deviceRow = function (device) {
@@ -1081,19 +1153,19 @@ function renderSettings() {
       return '<div class="linked-device"><span>' + icon('phone', 19) + '<span class="device-text"><strong>' + escapeHtml(device.name) + '</strong>' + (where ? '<small>' + where + '</small>' : '') + '</span></span><button class="text-button" data-revoke-device="' + escapeHtml(device.id) + '" type="button">Revocar</button></div>';
     };
     const devices = ownerDevices().map(deviceRow).join('');
-    const accountButton = function (id, username) {
-      return '<button class="text-button" data-edit-person="' + escapeHtml(id) + '" type="button">' + icon('edit', 16) + ' Editar</button>' + (username
+    const accountButton = function (id, username, twoFactor) {
+      return '<button class="text-button" data-edit-person="' + escapeHtml(id) + '" type="button">' + icon('edit', 16) + ' Editar</button>' + (twoFactor ? '<button class="text-button" data-remove-2fa="' + escapeHtml(id) + '" type="button">' + icon('reset', 16) + ' Quitar dos pasos</button>' : '') + (username
         ? '<button class="text-button" data-person-password="' + escapeHtml(id) + '" type="button">' + icon('reset', 16) + ' Cambiar contraseña</button><button class="text-button danger-text" data-remove-account="' + escapeHtml(id) + '" type="button">' + icon('close', 16) + ' Borrar cuenta</button>'
         : '<button class="text-button" data-person-invite="' + escapeHtml(id) + '" type="button">' + icon('plus', 16) + ' Crear invitación</button>');
     };
-    const ownerRow = '<div class="person-row"><div class="person-head"><span class="person-avatar">' + icon('user', 17) + '</span><div><strong>' + escapeHtml(profile.name ? profile.name + ' (tú)' : 'Tú') + '</strong><small>' + (desktopInfo.ownerAccount ? 'Usuario: ' + escapeHtml(desktopInfo.ownerAccount) : 'Sin usuario: crea una invitación para entrar desde otros dispositivos') + '</small></div></div>' +
-      '<div class="person-actions">' + accountButton('owner', desktopInfo.ownerAccount) + '</div></div>';
+    const ownerRow = '<div class="person-row"><div class="person-head"><span class="person-avatar">' + icon('user', 17) + '</span><div><strong>' + escapeHtml(profile.name ? profile.name + ' (tú)' : 'Tú') + '</strong><small>' + (desktopInfo.ownerAccount ? 'Usuario: ' + escapeHtml(desktopInfo.ownerAccount) + (desktopInfo.ownerTwoFactor ? ' · con dos pasos' : '') : 'Sin usuario: crea una invitación para entrar desde otros dispositivos') + '</small></div></div>' +
+      '<div class="person-actions">' + accountButton('owner', desktopInfo.ownerAccount, desktopInfo.ownerTwoFactor) + '</div></div>';
     const people = ownerRow + (desktopInfo.people || []).map(function (person) {
       const own = desktopInfo.devices.filter(function (device) { return device.personId === person.id; });
       const devicesLabel = own.length ? own.length + (own.length === 1 ? ' dispositivo' : ' dispositivos') : 'sin dispositivos';
-      return '<div class="person-row"><div class="person-head"><span class="person-avatar">' + escapeHtml(person.name.slice(0, 1).toLocaleUpperCase('es-CL')) + '</span><div><strong>' + escapeHtml(person.name) + '</strong><small>' + (person.username ? 'Usuario: ' + escapeHtml(person.username) : 'Sin usuario') + ' · ' + devicesLabel + '</small></div>' +
+      return '<div class="person-row"><div class="person-head"><span class="person-avatar">' + escapeHtml(person.name.slice(0, 1).toLocaleUpperCase('es-CL')) + '</span><div><strong>' + escapeHtml(person.name) + '</strong><small>' + (person.username ? 'Usuario: ' + escapeHtml(person.username) + (person.twoFactor ? ' · con dos pasos' : '') : 'Sin usuario') + ' · ' + devicesLabel + '</small></div>' +
         '<button class="icon-button person-remove" data-remove-person="' + escapeHtml(person.id) + '" type="button" aria-label="Eliminar a ' + escapeHtml(person.name) + '">' + icon('trash', 17) + '</button></div>' +
-        '<div class="person-actions">' + accountButton(person.id, person.username) + '<button class="text-button" data-pair-person="' + escapeHtml(person.id) + '" type="button">' + icon('qr', 16) + ' Conectar con QR</button></div>' +
+        '<div class="person-actions">' + accountButton(person.id, person.username, person.twoFactor) + '<button class="text-button" data-pair-person="' + escapeHtml(person.id) + '" type="button">' + icon('qr', 16) + ' Conectar con QR</button></div>' +
         own.map(deviceRow).join('') + '</div>';
     }).join('');
     return pageHeader('PREFERENCIAS', 'Ajustes', 'Tu dinero y tus dispositivos, bajo tu control.', '') +
@@ -1104,14 +1176,14 @@ function renderSettings() {
       '<section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('phone', 20) + '</span><div><h2>' + (DESKTOP ? 'Tu iPhone' : 'Este dispositivo') + '</h2><p>' + (DESKTOP ? 'Vincula y revoca dispositivos desde esta PC.' : 'Tiene tu sesión iniciada y quedó como dispositivo de confianza.') + '</p></div></div>' +
         (DESKTOP ? '' : '<button class="setting-action" data-action="logout" type="button"><span>' + icon('close', 18) + ' Cerrar sesión en este dispositivo</span>' + icon('arrowRight', 18) + '</button>') +
         (DESKTOP ? '<button class="setting-action" data-action="show-qr" type="button"><span>' + icon('qr', 18) + ' Conectar iPhone con QR</span>' + icon('arrowRight', 18) + '</button>' + (devices || '<p class="settings-note">Todavía no hay celulares vinculados.</p>') : ADMIN && devices ? '<p class="settings-note">Dispositivos con tu sesión iniciada:</p>' + devices : '') + '</section>' +
-      (DESKTOP ? '<section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('download', 20) + '</span><div><h2>Copias de seguridad</h2><p>Se guarda una copia local diaria cuando cambias datos.</p></div></div>' +
-        '<button class="setting-action" data-action="export-data" type="button"><span>' + icon('download', 18) + ' Exportar mis datos</span>' + icon('arrowRight', 18) + '</button>' +
+      (ADMIN ? '<section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('download', 20) + '</span><div><h2>Copias de seguridad</h2><p>Se guarda una copia local diaria cuando cambias datos.</p></div></div>' +
+        (DESKTOP ? '<button class="setting-action" data-action="export-data" type="button"><span>' + icon('download', 18) + ' Exportar mis datos</span>' + icon('arrowRight', 18) + '</button>' +
         '<button class="setting-action" data-action="restore-data" type="button"><span>' + icon('reset', 18) + ' Restaurar una copia</span>' + icon('arrowRight', 18) + '</button><input id="restore-file" type="file" accept=".json,application/json" hidden />' +
-        '<p class="settings-note">Copias automáticas en ' + escapeHtml(desktopInfo.backupDir || 'la carpeta de datos de MiPlata') + '</p></section>' : '') +
+        '<p class="settings-note">Copias automáticas en ' + escapeHtml(desktopInfo.backupDir || 'la carpeta de datos de MiPlata') + '</p>' : '') + offsiteNote() + '</section>' : '') +
       (ADMIN ? '<section class="panel settings-panel people-panel"><div class="settings-heading"><span class="settings-icon">' + icon('user', 20) + '</span><div><h2>Personas y cuentas</h2><p>Cada persona entra con su usuario y ve solo sus propios gastos.</p></div></div>' + (DESKTOP ? '' : '<p class="settings-note">Como estás fuera de la PC, te pediremos tu contraseña antes de hacer cambios.</p>') + people +
         ((desktopInfo.people || []).length ? '' : '<p class="settings-note">Agrega a alguien de tu familia o a un amigo para que lleve sus gastos aquí, sin ver los tuyos.</p>') +
         '<button class="setting-action" data-action="add-person" type="button"><span>' + icon('plus', 18) + ' Agregar persona</span>' + icon('arrowRight', 18) + '</button>' +
-        (desktopInfo.devices.some(function (device) { return device.country; }) ? '<p class="settings-note geo-credit">Países según <a href="https://db-ip.com" target="_blank" rel="noopener">IP Geolocation by DB-IP</a>. Son aproximados.</p>' : '') + '</section>' : '') + '</div>';
+        (desktopInfo.devices.some(function (device) { return device.country; }) ? '<p class="settings-note geo-credit">Países según <a href="https://db-ip.com" target="_blank" rel="noopener">IP Geolocation by DB-IP</a>. Son aproximados.</p>' : '') + '</section>' + activityPanel() : '') + '</div>';
   }
   return pageHeader('PREFERENCIAS', 'Ajustes', 'Personaliza esta vista previa y prueba el enlace con tu iPhone.', '') +
     '<div class="settings-grid"><section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('sun', 20) + '</span><div><h2>Apariencia</h2><p>Elige cómo quieres ver MiPlata.</p></div></div>' +
@@ -1408,6 +1480,12 @@ function confirmationModal() {
   const device = modal.action === 'revoke-device' ? desktopInfo.devices.find(function (entry) { return entry.id === modal.id; }) : null;
   const person = modal.action === 'remove-person' ? personById(modal.id) : null;
   const accountOf = modal.action === 'remove-account' ? (modal.id === 'owner' ? { name: 'ti', username: desktopInfo.ownerAccount } : personById(modal.id)) : null;
+  const twoFactorOf = modal.action === 'remove-2fa' ? (modal.id === 'owner' ? { name: 'tú' } : personById(modal.id)) : null;
+  if (twoFactorOf) {
+    return '<div class="modal-backdrop" data-action="cancel-confirm"></div><div class="dialog confirmation-dialog" role="alertdialog" aria-modal="true" aria-labelledby="dialog-title" aria-describedby="confirm-description">' +
+      '<div class="dialog-head"><div><p class="eyebrow">CONFIRMACIÓN</p><h2 id="dialog-title">Quitar verificación en dos pasos</h2></div><button class="icon-button" data-action="cancel-confirm" type="button" aria-label="Cerrar">' + icon('close', 20) + '</button></div>' +
+      '<p class="confirm-description" id="confirm-description">' + escapeHtml(twoFactorOf.name) + (modal.id === 'owner' ? ' podrás' : ' podrá') + ' entrar solo con la contraseña. Úsalo si se perdió el celular con la app de códigos; después se puede activar de nuevo desde el perfil.</p><div class="dialog-actions confirm-actions"><button class="button button-outline" data-action="cancel-confirm" type="button">Cancelar</button><button class="button button-danger" data-action="confirm-action" type="button">Quitar</button></div></div>';
+  }
   const title = modal.action === 'logout' ? 'Cerrar sesión' : accountOf ? 'Borrar cuenta' : person ? 'Eliminar persona' : modal.action === 'reset' ? 'Restaurar el ejemplo' : modal.action === 'restore' ? 'Restaurar copia' : device ? 'Revocar dispositivo' : item ? 'Eliminar movimiento' : 'Eliminar categoría';
   const description = modal.action === 'logout' ? '¿Quieres cerrar sesión en este dispositivo? Para volver a entrar necesitarás tu usuario y contraseña.'
     : accountOf ? 'Se borrará el usuario @' + escapeHtml(accountOf.username || '') + ' y se cerrarán todas las sesiones de ' + escapeHtml(accountOf.name) + '. Sus gastos se conservan, y puedes crear otra invitación cuando quieras.'
@@ -1473,6 +1551,9 @@ function renderModal() {
   if (modal.type === 'edit-person') return editPersonModal();
   if (modal.type === 'password') return passwordModal();
   if (modal.type === 'reauth') return reauthModal();
+  if (modal.type === 'twofa-setup') return twoFactorSetupModal();
+  if (modal.type === 'twofa-codes') return twoFactorCodesModal();
+  if (modal.type === 'twofa-disable') return twoFactorDisableModal();
   if (modal.type === 'goal') return goalModal();
   if (modal.type === 'recurring') return recurringModal();
   return '';
@@ -1784,6 +1865,10 @@ document.addEventListener('click', function (event) {
   const editPerson = event.target.closest('[data-edit-person]');
   if (editPerson && LIVE && ADMIN) { modal = { type: 'edit-person', personId: editPerson.dataset.editPerson }; render(); document.getElementById('edit-name')?.focus(); return; }
   const removeAccount = event.target.closest('[data-remove-account]');
+  const removeTwoFactor = event.target.closest('[data-remove-2fa]');
+  if (removeTwoFactor && LIVE && ADMIN) { modal = { type: 'confirmation', action: 'remove-2fa', id: removeTwoFactor.dataset.remove2fa }; render(); return; }
+  const alertButton = event.target.closest('[data-alert-ok], [data-alert-reject]');
+  if (alertButton && LIVE) { answerAlert(alertButton.dataset.alertOk || alertButton.dataset.alertReject, Boolean(alertButton.dataset.alertReject)); return; }
   if (removeAccount && LIVE && ADMIN) { modal = { type: 'confirmation', action: 'remove-account', id: removeAccount.dataset.removeAccount }; render(); return; }
   const passwordFor = event.target.closest('[data-person-password]');
   if (passwordFor && LIVE && ADMIN) { modal = { type: 'password', personId: passwordFor.dataset.personPassword }; render(); document.getElementById('new-password')?.focus(); return; }
@@ -1832,6 +1917,14 @@ document.addEventListener('click', function (event) {
     case 'logout':
       if (LIVE && !DESKTOP) { modal = { type: 'confirmation', action: 'logout' }; render(); }
       break;
+    case 'twofa-start':
+      apiPost('/api/profile/2fa/start', {}).then(function (result) { modal = { type: 'twofa-setup', secret: result.secret, qr: result.qr, link: result.link }; render(); document.getElementById('twofa-code')?.focus(); }).catch(function (error) { toast(error.message); });
+      break;
+    case 'twofa-disable': modal = { type: 'twofa-disable' }; render(); document.getElementById('twofa-off-password')?.focus(); break;
+    case 'copy-recovery':
+      if (modal && modal.codes && navigator.clipboard) navigator.clipboard.writeText(modal.codes.join('\n')).then(function () { toast('Códigos copiados'); }).catch(function () { toast('Cópialos manualmente'); });
+      break;
+    case 'load-activity': loadActivity(200); break;
     case 'close-install-hint':
       installHintHidden = true;
       try { localStorage.setItem(INSTALL_HINT_KEY, '1'); } catch (error) { /* sin almacenamiento, se oculta hasta recargar */ }
@@ -1892,6 +1985,10 @@ document.addEventListener('click', function (event) {
         const id = modal.id;
         modal = null; render();
         apiPost('/api/accounts/remove', { personId: id }).then(function () { return Promise.all([refreshDesktopInfo(false), loadProfile()]); }).then(function () { render(); toast('Cuenta borrada'); }).catch(function (error) { toast(error.message); });
+      } else if (modal.action === 'remove-2fa' && LIVE && ADMIN) {
+        const id = modal.id;
+        modal = null; render();
+        apiPost('/api/people/2fa/remove', { personId: id }).then(function () { return Promise.all([refreshDesktopInfo(false), loadProfile(), loadActivity()]); }).then(function () { render(); toast('Verificación en dos pasos quitada'); }).catch(function (error) { toast(error.message); });
       } else if (modal.action === 'remove-person' && LIVE && ADMIN) {
         const id = modal.id;
         modal = null; render();
@@ -2055,13 +2152,22 @@ document.addEventListener('submit', function (event) {
     const payload = { personId: modal.personId, name: String(form.get('name') || '').trim() };
     if (form.has('username')) payload.username = String(form.get('username') || '').trim();
     apiPost('/api/people/edit', payload).then(function () { modal = null; return Promise.all([refreshDesktopInfo(false), loadProfile()]); }).then(function () { render(); toast('Cambios guardados'); }).catch(function (error) { toast(error.message); });
+  } else if (event.target.id === 'twofa-enable-form') {
+    event.preventDefault();
+    const code = String(new FormData(event.target).get('code') || '').replace(/\s/g, '');
+    if (!/^\d{6}$/.test(code)) { toast('Escribe los 6 dígitos de la app'); return; }
+    apiPost('/api/profile/2fa/enable', { code: code }).then(function (result) { modal = { type: 'twofa-codes', codes: result.recoveryCodes }; return loadProfile(); }).then(function () { render(); toast('Verificación en dos pasos activada'); }).catch(function (error) { toast(error.message); });
+  } else if (event.target.id === 'twofa-disable-form') {
+    event.preventDefault();
+    const form = new FormData(event.target);
+    apiPost('/api/profile/2fa/disable', { password: String(form.get('password') || ''), code: String(form.get('code') || '') }).then(function () { return loadProfile(); }).then(function () { modal = { type: 'profile' }; render(); toast('Verificación en dos pasos desactivada'); }).catch(function (error) { toast(error.message); });
   } else if (event.target.id === 'reauth-form') {
     event.preventDefault();
     const password = String(new FormData(event.target).get('password') || '');
     if (!password) { toast('Escribe tu contraseña'); return; }
     const button = event.target.querySelector('button[type="submit"]');
     button.disabled = true;
-    fetch('/api/admin/unlock', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: password }) })
+    fetch('/api/admin/unlock', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: password, code: String(new FormData(event.target).get('code') || '') }) })
       .then(function (response) { return response.json().then(function (result) { if (!response.ok) throw new Error(result.error || 'No se pudo confirmar'); }); })
       .then(function () {
         const waiter = reauthWaiter; reauthWaiter = null;
@@ -2342,9 +2448,34 @@ function cancelReauth() {
   waiter.reject(new Error('Acción cancelada'));
 }
 
+function twoFactorSetupModal() {
+  return sideDialog('VERIFICACIÓN EN DOS PASOS', 'Activar en tu app', '<form id="twofa-enable-form" novalidate><ol class="invite-steps">' +
+      '<li>Abre una app de códigos, como Google Authenticator, Microsoft Authenticator o la app <strong>Contraseñas</strong> del iPhone.</li>' +
+      '<li>Escanea este código QR' + (modal.link ? ', o en el celular toca <a href="' + escapeHtml(modal.link) + '">Abrir en la app</a>' : '') + '.</li>' +
+      '<li>Escribe aquí los 6 dígitos que muestra la app.</li></ol>' +
+      '<div class="qr-wrap"><img class="real-qr" src="' + modal.qr + '" alt="QR para la app de códigos" /></div>' +
+      '<p class="pair-url">Clave para escribirla a mano: <strong>' + escapeHtml(String(modal.secret).replace(/(.{4})/g, '$1 ').trim()) + '</strong></p>' +
+      '<label class="field-label" for="twofa-code">Código de 6 dígitos</label><input class="text-input code-input" id="twofa-code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" required />' +
+      '<div class="dialog-actions"><button class="button button-outline" type="button" data-action="close-modal">Cancelar</button><button class="button button-primary" type="submit">Activar</button></div></form>');
+}
+
+function twoFactorCodesModal() {
+  return sideDialog('VERIFICACIÓN EN DOS PASOS', 'Guarda tus códigos de recuperación', '<p class="savings-form-note">Si pierdes el celular con la app, entra con uno de estos códigos en lugar de los 6 dígitos. Cada uno sirve una sola vez. Guárdalos en un lugar seguro, como tus notas o tu gestor de contraseñas: no los volveremos a mostrar.</p>' +
+    '<div class="recovery-codes">' + modal.codes.map(function (code) { return '<code>' + escapeHtml(code) + '</code>'; }).join('') + '</div>' +
+    '<div class="dialog-actions"><button class="button button-outline" type="button" data-action="copy-recovery">' + icon('file', 16) + ' Copiar códigos</button><button class="button button-primary" type="button" data-action="close-modal">Ya los guardé</button></div>');
+}
+
+function twoFactorDisableModal() {
+  return sideDialog('VERIFICACIÓN EN DOS PASOS', 'Desactivar', '<form id="twofa-disable-form" novalidate><p class="savings-form-note">Para desactivarla, confirma tu contraseña y un código de tu app (o uno de recuperación).</p>' +
+    '<label class="field-label" for="twofa-off-password">Tu contraseña</label><input class="text-input" id="twofa-off-password" name="password" type="password" autocomplete="current-password" required />' +
+    '<label class="field-label" for="twofa-off-code">Código de verificación</label><input class="text-input code-input" id="twofa-off-code" name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" required />' +
+    '<div class="dialog-actions"><button class="button button-outline" type="button" data-action="close-modal">Cancelar</button><button class="button button-danger" type="submit">Desactivar</button></div></form>');
+}
+
 function reauthModal() {
   return sideDialog('ADMINISTRACIÓN', 'Confirma tu contraseña', '<form id="reauth-form" novalidate><p class="savings-form-note">Por seguridad, la pedimos antes de cambiar personas o cuentas desde fuera de la PC. Durante 10 minutos no volveremos a pedirla en este dispositivo.</p>' +
     '<label class="field-label" for="reauth-password">Tu contraseña</label><input class="text-input" id="reauth-password" name="password" type="password" autocomplete="current-password" required />' +
+    (profile.twoFactor ? '<label class="field-label" for="reauth-code">Código de verificación</label><input class="text-input code-input" id="reauth-code" name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" required />' : '') +
     '<div class="dialog-actions"><button class="button button-outline" type="button" data-action="close-modal">Cancelar</button><button class="button button-primary" type="submit">Confirmar</button></div></form>');
 }
 
@@ -2354,14 +2485,15 @@ async function refreshDesktopInfo(openApproval) {
     const response = await fetch('/api/desktop-info', { cache: 'no-store' });
     if (!response.ok) return;
     const next = await response.json();
-    const withoutBackup = function (info) { return JSON.stringify(Object.assign({}, info, { lastBackup: null })); };
+    // La hora de última conexión cambia en cada visita: no basta para volver a dibujar (borraría lo que se está escribiendo).
+    const withoutBackup = function (info) { return JSON.stringify(Object.assign({}, info, { lastBackup: null, devices: (info.devices || []).map(function (item) { return Object.assign({}, item, { lastSeen: null }); }) })); };
     const changed = withoutBackup(next) !== withoutBackup(desktopInfo);
     desktopInfo = next;
     const status = document.querySelector('[data-side-status]');
     if (status) status.outerHTML = sideStatusMarkup();
     if (!selectedNetwork && next.networks.length) selectedNetwork = next.networks[0].address;
     if (openApproval && next.pending.length && !modal) modal = { type: 'qr' };
-    if (changed && (route === 'settings' || modal?.type === 'qr' || openApproval)) render();
+    if (changed && (modal ? modal.type === 'qr' : route === 'settings' || openApproval)) render();
   } catch (error) { console.warn('No se pudo actualizar la vinculación', error); }
 }
 
@@ -2397,6 +2529,9 @@ async function initializeLive() {
     data = saved.data;
     await loadProfile();
     render();
+    loadAlerts();
+    setInterval(loadAlerts, 60000);
+    if (ADMIN) setInterval(function () { if (route === 'settings' && !modal) loadActivity(activityLog && activityLog.length > 30 ? 200 : 30); }, 30000);
     if (ADMIN) await refreshDesktopInfo(false);
     setInterval(refreshLiveState, 10000);
     if (ADMIN) setInterval(function () { refreshDesktopInfo(false); }, DESKTOP ? 2500 : 10000);
