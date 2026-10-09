@@ -213,6 +213,10 @@ button:focus-visible, input:focus-visible {
 .side-widgets { display: grid; gap: 10px; margin: 20px 0 18px; }
 .side-profile { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); color: var(--text); text-align: left; cursor: pointer; }
 .side-profile:hover { border-color: var(--lavender); }
+.side-profile-row { display: flex; align-items: stretch; gap: 6px; }
+.side-profile-row .side-profile { min-width: 0; }
+.side-profile-row .side-logout { display: grid; place-items: center; flex: none; align-self: stretch; width: 46px; height: auto; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); color: var(--text-soft); }
+.side-profile-row .side-logout:hover { color: var(--danger-text); border-color: var(--danger-text); }
 .side-profile > span:not(.avatar) { display: grid; gap: 1px; min-width: 0; flex: 1; }
 .side-profile strong { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .side-profile small { color: var(--text-soft); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

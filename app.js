@@ -58,6 +58,7 @@ const iconPaths = {
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   phone: '<rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/>',
   calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18"/>',
+  logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
   user: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
   qr: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h2v2h-2zM20 14v3h-3M14 20h3M20 20h1"/>',
   wallet: '<path d="M20 7V5a2 2 0 0 0-2-2H5a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h15a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H5a3 3 0 0 1-3-3"/><path d="M22 12h-6a2 2 0 0 0 0 4h6"/>',
@@ -549,7 +550,10 @@ function profileSubtitle() {
 }
 
 function profileCard() {
-  return '<button class="side-profile" type="button" data-action="open-profile">' + avatarMarkup('medium') + '<span><strong>' + escapeHtml(profile.name || 'Tu perfil') + '</strong><small>' + profileSubtitle() + '</small></span>' + icon('arrowRight', 16) + '</button>';
+  const card = '<button class="side-profile" type="button" data-action="open-profile">' + avatarMarkup('medium') + '<span><strong>' + escapeHtml(profile.name || 'Tu perfil') + '</strong><small>' + profileSubtitle() + '</small></span>' + (LIVE && !DESKTOP ? '' : icon('arrowRight', 16)) + '</button>';
+  // Quien entra con usuario (celular o navegador) tiene a mano el botón para salir.
+  if (!LIVE || DESKTOP) return card;
+  return '<div class="side-profile-row">' + card + '<button class="icon-button side-logout" type="button" data-action="logout" aria-label="Cerrar sesión" title="Cerrar sesión">' + icon('logout', 18) + '</button></div>';
 }
 
 function profileModal() {
@@ -713,7 +717,7 @@ function shell(content) {
         '<nav class="side-nav" aria-label="Principal">' +
           navItem('home', 'Inicio', 'home') + navItem('transactions', 'Movimientos', 'list') + navItem('categories', 'Categorías', 'categories') + navItem('savings', 'Ahorros', 'savings') + navItem('settings', 'Ajustes', 'settings') +
         '</nav>' + sidebarWidgets() + '<div class="sidebar-foot">' + (LIVE && DESKTOP ? sideStatusMarkup() : '<span class="demo-status"><span class="status-dot"></span> ' + (LIVE ? 'Datos guardados en tu PC' : 'Modo demostración') + '</span><small>' + (LIVE ? 'Se sincronizan con tus celulares vinculados.' : 'Los cambios solo viven en este navegador.') + '</small>') + '</div></aside>' +
-      '<div class="app-body"><div class="mobile-topbar"><div class="mobile-wordmark"><span class="brand-mark"><img src="assets/miplata-logo.png" alt="" width="29" height="29" style="display:block;width:29px;height:29px;max-width:29px;max-height:29px" /></span><strong>MiPlata</strong></div><div class="mobile-actions"><button class="icon-button" data-action="toggle-theme" aria-label="Cambiar tema" type="button">' + icon(themeIcon, 20) + '</button>' + (LIVE ? '<button class="mobile-avatar" data-action="open-profile" type="button" aria-label="Tu perfil">' + avatarMarkup('small') + '</button>' : '') + '</div></div>' +
+      '<div class="app-body"><div class="mobile-topbar"><div class="mobile-wordmark"><span class="brand-mark"><img src="assets/miplata-logo.png" alt="" width="29" height="29" style="display:block;width:29px;height:29px;max-width:29px;max-height:29px" /></span><strong>MiPlata</strong></div><div class="mobile-actions"><button class="icon-button" data-action="toggle-theme" aria-label="Cambiar tema" type="button">' + icon(themeIcon, 20) + '</button>' + (LIVE && !DESKTOP ? '<button class="icon-button" data-action="logout" type="button" aria-label="Cerrar sesión" title="Cerrar sesión">' + icon('logout', 19) + '</button>' : '') + (LIVE ? '<button class="mobile-avatar" data-action="open-profile" type="button" aria-label="Tu perfil">' + avatarMarkup('small') + '</button>' : '') + '</div></div>' +
         '<main class="main-content" id="main-content">' + content + '</main></div>' +
       '<nav class="mobile-nav" aria-label="Principal">' +
         navItem('home', 'Inicio', 'home') + navItem('transactions', 'Movimientos', 'list') + navItem('categories', 'Categorías', 'categories') + navItem('savings', 'Ahorros', 'savings') + navItem('settings', 'Ajustes', 'settings') +
@@ -1353,8 +1357,9 @@ function confirmationModal() {
   const device = modal.action === 'revoke-device' ? desktopInfo.devices.find(function (entry) { return entry.id === modal.id; }) : null;
   const person = modal.action === 'remove-person' ? personById(modal.id) : null;
   const accountOf = modal.action === 'remove-account' ? (modal.id === 'owner' ? { name: 'ti', username: desktopInfo.ownerAccount } : personById(modal.id)) : null;
-  const title = accountOf ? 'Borrar cuenta' : person ? 'Eliminar persona' : modal.action === 'reset' ? 'Restaurar el ejemplo' : modal.action === 'restore' ? 'Restaurar copia' : device ? 'Revocar dispositivo' : item ? 'Eliminar movimiento' : 'Eliminar categoría';
-  const description = accountOf ? 'Se borrará el usuario @' + escapeHtml(accountOf.username || '') + ' y se cerrarán todas las sesiones de ' + escapeHtml(accountOf.name) + '. Sus gastos se conservan, y puedes crear otra invitación cuando quieras.'
+  const title = modal.action === 'logout' ? 'Cerrar sesión' : accountOf ? 'Borrar cuenta' : person ? 'Eliminar persona' : modal.action === 'reset' ? 'Restaurar el ejemplo' : modal.action === 'restore' ? 'Restaurar copia' : device ? 'Revocar dispositivo' : item ? 'Eliminar movimiento' : 'Eliminar categoría';
+  const description = modal.action === 'logout' ? '¿Quieres cerrar sesión en este dispositivo? Para volver a entrar necesitarás tu usuario y contraseña.'
+    : accountOf ? 'Se borrará el usuario @' + escapeHtml(accountOf.username || '') + ' y se cerrarán todas las sesiones de ' + escapeHtml(accountOf.name) + '. Sus gastos se conservan, y puedes crear otra invitación cuando quieras.'
     : person ? 'Se borrarán todos los gastos, boletas y documentos de "' + escapeHtml(person.name) + '", y sus celulares perderán el acceso. Esto no se puede deshacer.'
     : modal.action === 'reset'
     ? 'Se descartarán los cambios que hiciste en esta demostración y volverán los datos originales.'
@@ -1362,7 +1367,7 @@ function confirmationModal() {
     : device ? '¿Quieres quitar el acceso de "' + escapeHtml(device.name) + '"? Tendrás que vincularlo otra vez por QR.'
     : item ? '¿Quieres eliminar "' + escapeHtml(item.title) + '"? Este movimiento dejará de aparecer en el saldo y los gráficos.'
     : '¿Quieres eliminar la categoría "' + escapeHtml(category ? category.name : '') + '"?';
-  const actionLabel = accountOf ? 'Borrar cuenta' : person ? 'Eliminar persona' : modal.action === 'reset' ? 'Restaurar ejemplo' : modal.action === 'restore' ? 'Restaurar copia' : device ? 'Revocar acceso' : 'Eliminar';
+  const actionLabel = modal.action === 'logout' ? 'Cerrar sesión' : accountOf ? 'Borrar cuenta' : person ? 'Eliminar persona' : modal.action === 'reset' ? 'Restaurar ejemplo' : modal.action === 'restore' ? 'Restaurar copia' : device ? 'Revocar acceso' : 'Eliminar';
   return '<div class="modal-backdrop" data-action="cancel-confirm"></div><div class="dialog confirmation-dialog" role="alertdialog" aria-modal="true" aria-labelledby="dialog-title" aria-describedby="confirm-description">' +
     '<div class="dialog-head"><div><p class="eyebrow">CONFIRMACIÓN</p><h2 id="dialog-title">' + title + '</h2></div><button class="icon-button" data-action="cancel-confirm" type="button" aria-label="Cerrar">' + icon('close', 20) + '</button></div>' +
     '<p class="confirm-description" id="confirm-description">' + description + '</p><div class="dialog-actions confirm-actions"><button class="button button-outline" data-action="cancel-confirm" type="button">Cancelar</button><button class="button button-danger" data-action="confirm-action" type="button">' + actionLabel + '</button></div></div>';
@@ -1773,7 +1778,7 @@ document.addEventListener('click', function (event) {
       if (modal && modal.code && navigator.clipboard) navigator.clipboard.writeText(modal.code).then(function () { toast('Código copiado'); }).catch(function () { toast('Copia el código manualmente'); });
       break;
     case 'logout':
-      if (LIVE && !DESKTOP) apiPost('/api/logout', {}).then(function () { window.location.replace('/'); }).catch(function (error) { toast(error.message); });
+      if (LIVE && !DESKTOP) { modal = { type: 'confirmation', action: 'logout' }; render(); }
       break;
     case 'add-person': if (LIVE && DESKTOP) { modal = { type: 'person' }; render(); document.getElementById('person-name')?.focus(); } break;
     case 'show-qr':
@@ -1822,6 +1827,9 @@ document.addEventListener('click', function (event) {
         const candidate = restoreCandidate;
         modal = null; restoreCandidate = null; render();
         saveQueue.then(function () { return apiPost('/api/restore', candidate); }).then(function (result) { stateRevision = result.revision; data = result.data; render(); toast('Copia restaurada'); }).catch(function (error) { toast(error.message); });
+      } else if (modal.action === 'logout' && LIVE && !DESKTOP) {
+        modal = null; render();
+        apiPost('/api/logout', {}).then(function () { window.location.replace('/'); }).catch(function (error) { toast(error.message); });
       } else if (modal.action === 'remove-account' && LIVE && DESKTOP) {
         const id = modal.id;
         modal = null; render();
