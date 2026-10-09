@@ -576,15 +576,15 @@ function personModal() {
 
 function serverAddress() {
   const networks = desktopInfo.networks || [];
-  const chosen = networks.find(function (item) { return item.label.indexOf('Tailscale') === 0; }) || networks[0];
-  return chosen ? 'http://' + chosen.address + ':4174' : 'la dirección de MiPlata';
+  const chosen = networks.find(function (item) { return item.label.indexOf('Internet') === 0; }) || networks.find(function (item) { return item.label.indexOf('Tailscale') === 0; }) || networks[0];
+  return chosen ? chosen.url || 'http://' + chosen.address + ':4174' : 'la dirección de MiPlata';
 }
 
 function inviteModal() {
   const days = Math.max(1, Math.round((modal.expiresAt - Date.now()) / 86400000));
   return sideDialog('INVITACIÓN', modal.personId === 'owner' ? 'Tu código de invitación' : 'Código para ' + escapeHtml(modal.personName), '<div class="invite-code">' + escapeHtml(modal.code) + '</div>' +
     '<p class="savings-form-note">Sirve una sola vez y vence en ' + days + (days === 1 ? ' día' : ' días') + '. Compártelo solo con ' + (modal.personId === 'owner' ? 'tus dispositivos' : escapeHtml(modal.personName)) + '.</p>' +
-    '<ol class="invite-steps"><li>Abrir <strong>' + escapeHtml(serverAddress()) + '</strong> en el celular, con Tailscale conectado.</li><li>Tocar <strong>¿Tienes un código de invitación?</strong></li><li>Escribir este código y elegir usuario y contraseña.</li></ol>' +
+    '<ol class="invite-steps"><li>Abrir <strong>' + escapeHtml(serverAddress()) + '</strong> en el celular' + (serverAddress().indexOf('https://') === 0 ? '' : ', con Tailscale conectado') + '.</li><li>Tocar <strong>¿Tienes un código de invitación?</strong></li><li>Escribir este código y elegir usuario y contraseña.</li></ol>' +
     '<div class="dialog-actions"><button class="button button-outline" type="button" data-action="copy-invite">Copiar código</button><button class="button button-primary" type="button" data-action="close-modal">Listo</button></div>');
 }
 

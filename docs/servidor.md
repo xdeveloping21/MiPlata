@@ -125,6 +125,30 @@ Si alguien olvida su contraseña, presiona **Cambiar contraseña** junto a su no
 
 El QR (**Conectar con QR**) sigue disponible como alternativa. Si eliminas a una persona, se borran sus gastos, boletas y documentos, y sus dispositivos pierden el acceso.
 
+## 9. Publicar con tu dominio (sin Tailscale)
+
+Si prefieres que tú y las demás personas entren desde cualquier celular sin instalar Tailscale, publica MiPlata con tu dominio y HTTPS. El certificado HTTPS es gratuito (Let's Encrypt) y se renueva solo.
+
+1. En el panel DNS de tu dominio crea un registro **A**: nombre `miplata` (queda `miplata.tudominio.cl`) y valor la IP pública de la VPS. Si usas Cloudflare, deja la nube en gris (**Solo DNS**).
+2. Espera unos minutos y, dentro de la VPS, ejecuta:
+
+   ```bash
+   bash /opt/miplata/deploy/instalar.sh
+   bash /opt/miplata/deploy/publicar.sh miplata.tudominio.cl
+   ```
+
+   El script revisa que el dominio apunte a la VPS, instala Caddy, obtiene el certificado y abre los puertos 80 y 443.
+3. Abre `https://miplata.tudominio.cl`: verás la pantalla para iniciar sesión.
+4. Crea las invitaciones desde la PC con el túnel del paso 5 (**Ajustes → Personas y cuentas → Crear invitación**), también la tuya en la fila **Tú**.
+
+Seguridad:
+
+- Desde el dominio nadie puede entrar como administrador: vincular, crear invitaciones, cambiar contraseñas, exportar y restaurar solo funcionan por el túnel SSH (`localhost:4174`).
+- Sin usuario y contraseña no se ve ningún dato. Usa contraseñas largas y distintas a las de otros sitios.
+- Tailscale sigue funcionando igual para quien lo tenga.
+
+Para dejar de publicarla: `bash /opt/miplata/deploy/publicar.sh --quitar`.
+
 ## Actualizar MiPlata
 
 Cuando haya una versión nueva, entra a la VPS y ejecuta:

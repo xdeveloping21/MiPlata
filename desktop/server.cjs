@@ -124,19 +124,24 @@ async function readRaw(req, limit) {
 }
 
 // options.onlyTailscale (modo servidor en una VPS): solo responde a la propia máquina y a la red de Tailscale.
+// options.publicHost: dominio publicado en internet con HTTPS a través de Caddy (deploy/publicar.sh).
 function startServer(store, root, onPending, options = {}) {
-  const networks = () => networkOptions().filter((item) => !options.onlyTailscale || isTailscaleAddress(item.address));
+  const publicHost = options.publicHost ? String(options.publicHost).toLowerCase() : null;
+  const networks = () => {
+    const found = networkOptions().filter((item) => !options.onlyTailscale || isTailscaleAddress(item.address)).map((item) => ({ ...item, url: 'http://' + item.address + ':' + PORT }));
+    return publicHost ? [{ address: publicHost, label: 'Internet - ' + publicHost, url: 'https://' + publicHost }, ...found] : found;
+  };
   const pending = new Map();
   let pairToken = null;
   let pairExpires = 0;
   let pairPerson = 'owner';
   const limiter = attemptLimiter();
 
-  function startSession(res, personId, deviceName) {
+  function startSession(res, personId, deviceName, secure) {
     const token = crypto.randomBytes(32).toString('base64url');
     store.addDevice(DEVICE_NAMES.includes(deviceName) ? deviceName : 'Navegador', token, personId);
     // Dispositivo de confianza: la sesión dura un año o hasta que se revoque desde la PC.
-    return json(res, 200, { ok: true }, { 'Set-Cookie': 'mg_session=' + token + '; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000' });
+    return json(res, 200, { ok: true }, { 'Set-Cookie': 'mg_session=' + token + '; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000' + secure });
   }
 
   const server = http.createServer(async (req, res) => {
@@ -147,7 +152,11 @@ function startServer(store, root, onPending, options = {}) {
       if (options.onlyTailscale && !localRequest(req) && !isTailscaleAddress(req.socket.remoteAddress)) { req.socket.destroy(); return; }
       const allowedHosts = new Set(['127.0.0.1', 'localhost', ...networks().map((item) => item.address)]);
       if (!allowedHosts.has(requestHost)) return json(res, 403, { error: 'Dirección no permitida' });
-      const isLocal = localRequest(req);
+      // Lo que llega por Caddy viene desde internet aunque la conexión sea local: nunca es la PC dueña.
+      const proxied = Boolean(req.headers['x-miplata-proxy'] || req.headers['x-forwarded-for']);
+      const isLocal = localRequest(req) && !proxied;
+      const secure = proxied && publicHost !== null ? '; Secure' : '';
+      if (proxied && requestHost !== publicHost) return json(res, 403, { error: 'Dirección no permitida' });
       const cookie = (req.headers.cookie || '').split(';').map((part) => part.trim()).find((part) => part.startsWith('mg_session='));
       const device = cookie ? store.deviceForToken(cookie.slice('mg_session='.length)) : null;
       const authorized = isLocal || Boolean(device);
@@ -178,7 +187,7 @@ function startServer(store, root, onPending, options = {}) {
         if (!item || Date.now() - item.createdAt > 300000) { pending.delete(requestId); return json(res, 200, { status: 'expired' }); }
         if (item.status === 'approved') {
           pending.delete(requestId);
-          return json(res, 200, { status: 'approved' }, { 'Set-Cookie': 'mg_session=' + item.token + '; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000' });
+          return json(res, 200, { status: 'approved' }, { 'Set-Cookie': 'mg_session=' + item.token + '; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000' + secure });
         }
         if (item.status === 'denied') pending.delete(requestId);
         return json(res, 200, { status: item.status });
@@ -186,25 +195,25 @@ function startServer(store, root, onPending, options = {}) {
 
       if ((pathname === '/api/login' || pathname === '/api/register') && req.method === 'POST') {
         const body = await readBody(req);
-        const address = String(req.socket.remoteAddress || '');
+        const address = proxied ? String(req.headers['x-miplata-client'] || 'internet') : String(req.socket.remoteAddress || '');
         const keys = ['ip:' + address, 'user:' + String(body.username || '').trim().toLowerCase()];
         if (limiter.locked(keys)) return json(res, 429, { error: 'Demasiados intentos. Espera 15 minutos y vuelve a intentarlo.' });
         if (pathname === '/api/login') {
           const personId = store.verifyLogin(body.username, body.password);
           if (!personId) { limiter.fail(keys); return json(res, 401, { error: 'Usuario o contraseña incorrectos' }); }
           limiter.clear(keys);
-          return startSession(res, personId, body.device);
+          return startSession(res, personId, body.device, secure);
         }
         let personId;
         try { personId = store.registerAccount(body.code, body.username, body.password); } catch (error) { limiter.fail(keys.slice(0, 1)); return json(res, 400, { error: error.message }); }
         limiter.clear(keys);
-        return startSession(res, personId, body.device);
+        return startSession(res, personId, body.device, secure);
       }
 
       if (pathname.startsWith('/api/') && !authorized) return json(res, 401, { error: 'Inicia sesión para continuar' });
       if (pathname === '/api/logout' && req.method === 'POST') {
         if (device) store.revokeDevice(device.id);
-        return json(res, 200, { ok: true }, { 'Set-Cookie': 'mg_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0' });
+        return json(res, 200, { ok: true }, { 'Set-Cookie': 'mg_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0' + secure });
       }
       const own = authorized ? store.forPerson(personId) : null;
       if (pathname === '/api/state' && req.method === 'GET') return json(res, 200, own.getState());
@@ -263,14 +272,15 @@ function startServer(store, root, onPending, options = {}) {
       if (pathname === '/api/pair/start' && req.method === 'POST') {
         const body = await readBody(req);
         const addresses = networks();
-        const host = addresses.some((item) => item.address === body.address) ? body.address : addresses[0]?.address;
-        if (!host) return json(res, 503, { error: 'No hay una red Wi-Fi o Tailscale activa' });
+        const chosen = addresses.find((item) => item.address === body.address) || addresses[0];
+        if (!chosen) return json(res, 503, { error: 'No hay una red Wi-Fi o Tailscale activa' });
+        const host = chosen.address;
         const person = body.personId || 'owner';
         if (person !== 'owner' && !store.listPeople().some((item) => item.id === person)) return json(res, 404, { error: 'Persona no encontrada' });
         pairPerson = person;
         pairToken = crypto.randomBytes(24).toString('base64url');
         pairExpires = Date.now() + 300000;
-        const pairUrl = 'http://' + host + ':' + PORT + '/pair?token=' + pairToken;
+        const pairUrl = chosen.url + '/pair?token=' + pairToken;
         const qr = await QRCode.toDataURL(pairUrl, { width: 250, margin: 2, color: { dark: '#262536', light: '#fdfbf7' } });
         return json(res, 200, { address: host, url: pairUrl, qr, expires: pairExpires, personId: pairPerson });
       }
