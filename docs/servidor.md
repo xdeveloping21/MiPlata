@@ -6,7 +6,7 @@ Para que tus datos no queden expuestos en internet, MiPlata solo responde dentro
 
 ## Lo que necesitas
 
-- Una VPS con **Ubuntu 24.04 LTS**, con 1 GB de RAM o más y la zona horaria **America/Santiago**.
+- Una VPS con **Ubuntu 24.04 LTS** (recomendado; también funciona con 20.04 o 22.04), con 1 GB de RAM o más y la zona horaria **America/Santiago**.
 - Una cuenta de [Tailscale](https://tailscale.com), y la app de Tailscale instalada en tu PC y en tu iPhone con esa misma cuenta.
 - En la PC, la terminal de Windows (PowerShell). Ya trae `ssh` y `scp`.
 
