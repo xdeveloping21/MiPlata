@@ -13,6 +13,11 @@ function localRequest(req) {
   return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
 }
 
+function isTailscaleAddress(address) {
+  const parts = String(address || '').replace(/^::ffff:/, '').split('.').map(Number);
+  return parts.length === 4 && parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127;
+}
+
 function networkOptions() {
   const found = [];
   for (const [name, entries] of Object.entries(os.networkInterfaces())) {
@@ -75,7 +80,9 @@ async function readRaw(req, limit) {
   return Buffer.concat(chunks);
 }
 
-function startServer(store, root, onPending) {
+// options.onlyTailscale (modo servidor en una VPS): solo responde a la propia máquina y a la red de Tailscale.
+function startServer(store, root, onPending, options = {}) {
+  const networks = () => networkOptions().filter((item) => !options.onlyTailscale || isTailscaleAddress(item.address));
   const pending = new Map();
   let pairToken = null;
   let pairExpires = 0;
@@ -85,7 +92,8 @@ function startServer(store, root, onPending) {
       const url = new URL(req.url, 'http://localhost');
       const pathname = url.pathname;
       const requestHost = String(req.headers.host || '').split(':')[0].toLowerCase();
-      const allowedHosts = new Set(['127.0.0.1', 'localhost', ...networkOptions().map((item) => item.address)]);
+      if (options.onlyTailscale && !localRequest(req) && !isTailscaleAddress(req.socket.remoteAddress)) { req.socket.destroy(); return; }
+      const allowedHosts = new Set(['127.0.0.1', 'localhost', ...networks().map((item) => item.address)]);
       if (!allowedHosts.has(requestHost)) return json(res, 403, { error: 'Dirección no permitida' });
       const isLocal = localRequest(req);
       const cookie = (req.headers.cookie || '').split(';').map((part) => part.trim()).find((part) => part.startsWith('mg_session='));
@@ -155,10 +163,10 @@ function startServer(store, root, onPending) {
       }
 
       if (pathname.startsWith('/api/') && !isLocal) return json(res, 403, { error: 'Esta acción se hace en la PC' });
-      if (pathname === '/api/desktop-info' && req.method === 'GET') return json(res, 200, { networks: networkOptions(), devices: store.listDevices(), pending: [...pending.entries()].filter(([, item]) => item.status === 'pending' && Date.now() - item.createdAt < 300000).map(([id, item]) => ({ id, name: item.name })), backupDir: store.backupDir, lastBackup: store.lastBackupAt() });
+      if (pathname === '/api/desktop-info' && req.method === 'GET') return json(res, 200, { networks: networks(), devices: store.listDevices(), pending: [...pending.entries()].filter(([, item]) => item.status === 'pending' && Date.now() - item.createdAt < 300000).map(([id, item]) => ({ id, name: item.name })), backupDir: store.backupDir, lastBackup: store.lastBackupAt() });
       if (pathname === '/api/pair/start' && req.method === 'POST') {
         const body = await readBody(req);
-        const addresses = networkOptions();
+        const addresses = networks();
         const host = addresses.some((item) => item.address === body.address) ? body.address : addresses[0]?.address;
         if (!host) return json(res, 503, { error: 'No hay una red Wi-Fi o Tailscale activa' });
         pairToken = crypto.randomBytes(24).toString('base64url');

@@ -1,0 +1,20 @@
+[Unit]
+Description=MiPlata en modo servidor
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+User=miplata
+Group=miplata
+StateDirectory=miplata
+Environment=MIPLATA_DATA=/var/lib/miplata
+ExecStart=/usr/bin/node /opt/miplata/desktop/headless.cjs
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

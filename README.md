@@ -22,6 +22,7 @@ MiPlata es un fork de [MisGastos](https://github.com/ValentinTarnovsky/MisGastos
 - Foto de la boleta o captura de pantalla opcional en cada movimiento.
 - Archivo opcional de factura o documento (PDF, Excel, Word, CSV, XML o TXT, hasta 15 MB) en cada movimiento. En la PC se abre con el programa que tengas para ese tipo de archivo.
 - Barra lateral con botón para agregar un gasto (atajo Ctrl+N), presupuesto mensual, meta de ahorro, próximos pagos fijos con aviso de vencimiento y el estado del celular vinculado y de la copia de seguridad.
+- Modo servidor para dejar MiPlata siempre activa en una VPS con Linux, accesible solo por Tailscale. Guía paso a paso en [docs/servidor.md](docs/servidor.md).
 - Las imágenes y los archivos se guardan en las carpetas `receipts` y `documents` de los datos de MiPlata, en tu PC, y no se incluyen en la copia JSON exportada.
 - Si MisGastos estaba instalado, MiPlata copia sus datos en el primer inicio, sin borrar ni modificar los originales. También restaura copias JSON de MisGastos; los ahorros en ARS se leen como CLP.
 
