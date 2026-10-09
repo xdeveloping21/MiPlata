@@ -175,6 +175,95 @@ let rangeTo = '';
 let amountMin = '';
 let amountMax = '';
 
+// Modo sin conexión: si no hay señal, los cambios quedan guardados en este dispositivo (con la versión del servidor
+// de la que partieron) y se envían al volver la conexión, mezclándolos con lo que otros hayan cambiado mientras tanto.
+const PENDING_KEY = 'miplata-cambios-sin-conexion';
+let serverData = null;
+let offlinePending = null;
+let syncingPending = false;
+function writePending(value) {
+  offlinePending = value;
+  try { if (value) localStorage.setItem(PENDING_KEY, JSON.stringify(value)); else localStorage.removeItem(PENDING_KEY); } catch (error) { /* sin almacenamiento: queda solo en memoria */ }
+  const badge = document.querySelector('[data-connection]');
+  if (badge) badge.outerHTML = connectionBadge();
+}
+function readPending() {
+  try { return JSON.parse(localStorage.getItem(PENDING_KEY)); } catch (error) { return null; }
+}
+function connectionBadge() {
+  if (!LIVE || DESKTOP) return '<span data-connection hidden></span>';
+  if (offlinePending) return '<span class="connection-badge" data-connection>' + icon('info', 14) + (navigator.onLine ? ' Enviando cambios...' : ' Sin conexión · cambios guardados en este dispositivo') + '</span>';
+  if (!navigator.onLine) return '<span class="connection-badge" data-connection>' + icon('info', 14) + ' Sin conexión</span>';
+  return '<span data-connection hidden></span>';
+}
+// Mezcla de tres versiones: lo que cambiaste sin conexión gana; lo que no tocaste toma lo nuevo del servidor.
+// Las listas con id (movimientos, categorías, metas...) se mezclan elemento por elemento.
+function mergeStates(base, local, remote) {
+  const same = function (a, b) { return JSON.stringify(a) === JSON.stringify(b); };
+  const result = {};
+  const keys = new Set(Object.keys(remote || {}).concat(Object.keys(local || {})));
+  keys.forEach(function (key) {
+    const b = base ? base[key] : undefined;
+    const l = local[key];
+    const r = remote[key];
+    const byId = function (list) { return Array.isArray(list) && list.every(function (item) { return item && typeof item === 'object' && 'id' in item; }); };
+    if (byId(l) && byId(r) && (b === undefined || byId(b))) {
+      const index = function (list) { const map = new Map(); (list || []).forEach(function (item) { map.set(item.id, item); }); return map; };
+      const baseMap = index(b), localMap = index(l), remoteMap = index(r);
+      const merged = [];
+      r.forEach(function (item) {
+        const before = baseMap.get(item.id);
+        const mine = localMap.get(item.id);
+        if (before && !mine) { if (same(before, item)) return; merged.push(item); return; }
+        merged.push(mine && before && !same(mine, before) ? mine : mine && !before ? mine : item);
+      });
+      l.forEach(function (item) {
+        if (remoteMap.has(item.id)) return;
+        const before = baseMap.get(item.id);
+        if (before && same(before, item)) return;
+        merged.push(item);
+      });
+      result[key] = merged;
+    } else {
+      result[key] = same(l, b) ? r : l;
+    }
+  });
+  return result;
+}
+async function syncPending() {
+  if (!offlinePending || syncingPending) return;
+  syncingPending = true;
+  try {
+    for (let attempt = 0; attempt < 3 && offlinePending; attempt++) {
+      const response = await fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ revision: offlinePending.baseRevision, data: offlinePending.data }) });
+      if (response.status === 401) { window.location.replace('/'); return; }
+      const result = await response.json();
+      if (response.ok) {
+        stateRevision = result.revision; serverData = offlinePending.data; writePending(null);
+        toast('Se guardaron los cambios que hiciste sin conexión');
+        return;
+      }
+      if (response.status === 409) {
+        const merged = mergeStates(offlinePending.base, offlinePending.data, result.data);
+        writePending({ baseRevision: result.revision, base: result.data, data: merged });
+        data = JSON.parse(JSON.stringify(merged)); if (!modal) render();
+        continue;
+      }
+      if (response.status === 400) {
+        // El servidor no acepta estos cambios: se descartan para no dejar el dispositivo bloqueado y se vuelve a lo guardado.
+        writePending(null);
+        const fresh = await fetch('/api/state', { cache: 'no-store' }).then(function (r) { return r.json(); });
+        stateRevision = fresh.revision; data = fresh.data; serverData = JSON.parse(JSON.stringify(fresh.data)); if (!modal) render();
+        toast('No se pudieron guardar los cambios sin conexión (' + (result.error || 'datos no válidos') + '). Se muestran los datos actuales.');
+        return;
+      }
+      throw new Error(result.error || 'No se pudieron guardar los cambios');
+    }
+  } catch (error) {
+    if (!(error instanceof TypeError)) toast('No se pudieron enviar los cambios sin conexión: ' + error.message);
+  } finally { syncingPending = false; }
+}
+
 function saveData() {
   if (LIVE) {
     const snapshot = JSON.parse(JSON.stringify(data));
@@ -182,24 +271,36 @@ function saveData() {
     savesPending++;
     saveQueue = saveQueue.then(async function () {
       if (generation !== saveGeneration) return;
-      const response = await fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ revision: stateRevision, data: snapshot }) });
+      // Ya hay cambios esperando señal: este se suma a ellos.
+      if (offlinePending) { writePending(Object.assign({}, offlinePending, { data: snapshot })); syncPending(); return; }
+      let response;
+      try {
+        response = await fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ revision: stateRevision, data: snapshot }) });
+      } catch (error) {
+        if (!(error instanceof TypeError) || DESKTOP) throw error;
+        writePending({ baseRevision: stateRevision, base: serverData, data: snapshot });
+        toast('Sin conexión: el cambio quedó guardado en este dispositivo');
+        return;
+      }
       const result = await response.json();
       if (response.status === 409) {
         saveGeneration++;
         stateRevision = result.revision;
         data = result.data;
+        serverData = JSON.parse(JSON.stringify(result.data));
         render();
         toast('Otro dispositivo cambió los datos. Vuelve a intentar tu cambio.');
         return;
       }
       if (!response.ok) throw new Error(result.error || 'No se pudieron guardar los datos');
       stateRevision = result.revision;
+      serverData = snapshot;
     }).catch(async function (error) {
       saveGeneration++;
       console.error(error);
       try {
         const response = await fetch('/api/state', { cache: 'no-store' });
-        if (response.ok) { const saved = await response.json(); stateRevision = saved.revision; data = saved.data; render(); }
+        if (response.ok) { const saved = await response.json(); stateRevision = saved.revision; data = saved.data; serverData = JSON.parse(JSON.stringify(saved.data)); render(); }
       } catch (ignored) { console.warn('No se pudo recuperar el estado guardado', ignored); }
       toast('No se pudo guardar: ' + error.message);
     }).finally(function () { savesPending--; });
@@ -590,7 +691,7 @@ async function storeAvatar(file) {
   context.drawImage(image, (image.naturalWidth - side) / 2, (image.naturalHeight - side) / 2, side, side, 0, 0, 320, 320);
   const blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/jpeg', 0.85); });
   if (!blob) throw new Error('No se pudo preparar la foto');
-  const response = await fetch('/api/profile/avatar', { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
+  const response = await netFetch('/api/profile/avatar', { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error || 'No se pudo guardar la foto');
   return result;
@@ -806,7 +907,7 @@ function shell(content) {
           navItem('home', 'Inicio', 'home') + navItem('transactions', 'Movimientos', 'list') + navItem('categories', 'Categorías', 'categories') + navItem('savings', 'Ahorros', 'savings') + navItem('settings', 'Ajustes', 'settings') +
         '</nav>' + sidebarWidgets() + '<div class="sidebar-foot">' + (LIVE && DESKTOP ? sideStatusMarkup() : '<span class="demo-status"><span class="status-dot"></span> ' + (LIVE ? 'Datos guardados en tu PC' : 'Modo demostración') + '</span><small>' + (LIVE ? 'Se sincronizan con tus celulares vinculados.' : 'Los cambios solo viven en este navegador.') + '</small>') + '</div></aside>' +
       '<div class="app-body"><div class="mobile-topbar"><div class="mobile-wordmark"><span class="brand-mark"><img src="assets/miplata-logo.png" alt="" width="29" height="29" style="display:block;width:29px;height:29px;max-width:29px;max-height:29px" /></span><strong>MiPlata</strong></div><div class="mobile-actions"><button class="icon-button" data-action="toggle-theme" aria-label="Cambiar tema" type="button">' + icon(themeIcon, 20) + '</button>' + (LIVE && !DESKTOP ? '<button class="icon-button" data-action="logout" type="button" aria-label="Cerrar sesión" title="Cerrar sesión">' + icon('logout', 19) + '</button>' : '') + (LIVE ? '<button class="mobile-avatar" data-action="open-profile" type="button" aria-label="Tu perfil">' + avatarMarkup('small') + '</button>' : '') + '</div></div>' +
-        '<main class="main-content' + (hint ? ' with-install-hint' : '') + '" id="main-content">' + alertsBanner() + content + '</main></div>' +
+        '<main class="main-content' + (hint ? ' with-install-hint' : '') + '" id="main-content">' + connectionBadge() + alertsBanner() + content + '</main></div>' +
       '<nav class="mobile-nav" aria-label="Principal">' +
         navItem('home', 'Inicio', 'home') + navItem('transactions', 'Movimientos', 'list') + navItem('categories', 'Categorías', 'categories') + navItem('savings', 'Ahorros', 'savings') + navItem('settings', 'Ajustes', 'settings') +
       '</nav>' +
@@ -1311,7 +1412,7 @@ async function storeDocument(file) {
     try { localStorage.setItem(DOCUMENT_DEMO_KEY, JSON.stringify(documents)); } catch (error) { throw new Error('No queda espacio en este navegador para el archivo'); }
     return { id: id, name: file.name };
   }
-  const response = await fetch('/api/documents?name=' + encodeURIComponent(file.name), { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: file });
+  const response = await netFetch('/api/documents?name=' + encodeURIComponent(file.name), { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: file });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error || 'No se pudo guardar el archivo');
   return result;
@@ -1367,7 +1468,7 @@ async function storeReceipt(file) {
   }
   const blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/jpeg', 0.82); });
   if (!blob) throw new Error('No se pudo preparar la imagen');
-  const response = await fetch('/api/receipts', { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
+  const response = await netFetch('/api/receipts', { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error || 'No se pudo guardar la boleta');
   return result.id;
@@ -1980,7 +2081,14 @@ document.addEventListener('click', function (event) {
         saveQueue.then(function () { return apiPost('/api/restore', candidate); }).then(function (result) { stateRevision = result.revision; data = result.data; render(); toast('Copia restaurada'); }).catch(function (error) { toast(error.message); });
       } else if (modal.action === 'logout' && LIVE && !DESKTOP) {
         modal = null; render();
-        apiPost('/api/logout', {}).then(function () { window.location.replace('/'); }).catch(function (error) { toast(error.message); });
+        if (offlinePending) { toast('Tienes cambios sin enviar. Espera a tener conexión antes de cerrar sesión.'); break; }
+        apiPost('/api/logout', {}).then(function () {
+          // Borra lo guardado para usar MiPlata sin conexión: el próximo que use este navegador no verá tus datos.
+          writePending(null);
+          if (navigator.serviceWorker && navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage('clear');
+          if (window.caches) caches.keys().then(function (keys) { return Promise.all(keys.map(function (key) { return caches.delete(key); })); }).finally(function () { window.location.replace('/'); });
+          else window.location.replace('/');
+        }).catch(function (error) { toast(error.message); });
       } else if (modal.action === 'remove-account' && LIVE && ADMIN) {
         const id = modal.id;
         modal = null; render();
@@ -2421,8 +2529,16 @@ window.addEventListener('storage', function (event) {
   if (event.key === STORAGE_KEY) { data = loadData(); render(); }
 });
 
+// fetch con un mensaje claro cuando no hay señal.
+async function netFetch(url, options) {
+  try { return await fetch(url, options); } catch (error) {
+    if (error instanceof TypeError) throw new Error(DESKTOP ? 'No hay conexión con MiPlata' : 'Sin conexión. Inténtalo cuando vuelva la señal.');
+    throw error;
+  }
+}
+
 async function apiPost(url, payload) {
-  const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  const response = await netFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
   const result = await response.json();
   if (response.status === 403 && result.reauth) {
     await confirmAdminPassword();
@@ -2509,13 +2625,14 @@ async function startPairing(address) {
 
 async function refreshLiveState() {
   if (!LIVE || savesPending) return;
+  if (offlinePending) { syncPending(); return; }
   try {
     const response = await fetch('/api/state', { cache: 'no-store' });
     if (response.status === 401) { window.location.replace('/'); return; }
     if (!response.ok) return;
     const next = await response.json();
     if (modal) return;
-    if (next.revision > stateRevision) { stateRevision = next.revision; data = next.data; render(); toast('Datos actualizados desde otro dispositivo'); }
+    if (next.revision > stateRevision) { stateRevision = next.revision; data = next.data; serverData = JSON.parse(JSON.stringify(next.data)); render(); toast('Datos actualizados desde otro dispositivo'); }
   } catch (error) { console.warn('Sin conexión con la PC', error); }
 }
 
@@ -2527,8 +2644,16 @@ async function initializeLive() {
     const saved = await response.json();
     stateRevision = saved.revision;
     data = saved.data;
+    serverData = JSON.parse(JSON.stringify(saved.data));
+    // Cambios hechos sin conexión en una visita anterior: se muestran y se envían.
+    const pending = DESKTOP ? null : readPending();
+    if (pending && pending.data) { offlinePending = pending; data = JSON.parse(JSON.stringify(pending.data)); }
+    if (!DESKTOP && 'serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('/sw.js').catch(function (error) { console.warn('Sin modo sin conexión', error); });
+    window.addEventListener('online', function () { writePending(offlinePending); syncPending(); refreshLiveState(); });
+    window.addEventListener('offline', function () { writePending(offlinePending); });
     await loadProfile();
     render();
+    syncPending();
     loadAlerts();
     setInterval(loadAlerts, 60000);
     if (ADMIN) setInterval(function () { if (route === 'settings' && !modal) loadActivity(activityLog && activityLog.length > 30 ? 200 : 30); }, 30000);

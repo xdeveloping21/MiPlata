@@ -166,6 +166,7 @@ button:focus-visible, input:focus-visible {
 .person-remove { width: 34px; height: 34px; flex: none; }
 .person-actions { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 0 0 10px 46px; }
 .person-actions .text-button { display: inline-flex; align-items: center; gap: 6px; }
+.connection-badge { display: flex; align-items: center; gap: 6px; width: fit-content; margin: 0 0 14px; padding: 7px 12px; border-radius: 999px; background: var(--surface-soft); color: var(--text-soft); font-size: 12px; font-weight: 700; }
 .login-alert { display: flex; align-items: center; gap: 14px; margin: 0 0 18px; padding: 14px 16px; border: 1px solid var(--border); border-left: 4px solid var(--danger-text); border-radius: 14px; background: var(--coral-wash); color: var(--text); }
 .login-alert > svg { flex: none; color: var(--danger-text); }
 .login-alert > div:first-of-type { flex: 1; min-width: 0; }

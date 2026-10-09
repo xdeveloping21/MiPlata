@@ -40,6 +40,7 @@
       "app.js",
       "category-icons.js",
       "runtime.js",
+      "sw.js",
       "assets/**/*",
       "desktop/**/*",
       "initial-state.json",

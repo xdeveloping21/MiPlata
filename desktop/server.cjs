@@ -277,7 +277,8 @@ function startServer(store, root, onPending, options = {}) {
       if (pathname === '/api/state' && req.method === 'GET') return json(res, 200, own.getState());
       if (pathname === '/api/state' && req.method === 'POST') {
         const body = await readBody(req);
-        const result = own.saveState(body.revision, body.data);
+        let result;
+        try { result = own.saveState(body.revision, body.data); } catch (error) { return json(res, 400, { error: error.message }); }
         return json(res, result.conflict ? 409 : 200, result);
       }
       if (pathname === '/api/receipts' && req.method === 'POST') {
@@ -510,6 +511,11 @@ function startServer(store, root, onPending, options = {}) {
         const file = pathname === '/apple-touch-icon.png' ? 'apple-touch-icon.png' : 'manifest.webmanifest';
         const bytes = fs.readFileSync(path.join(root, file));
         res.writeHead(200, { 'Content-Type': TYPES[path.extname(file)], 'Content-Length': bytes.length, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+        return res.end(bytes);
+      }
+      if (pathname === '/sw.js') {
+        const bytes = fs.readFileSync(path.join(root, 'sw.js'));
+        res.writeHead(200, { 'Content-Type': TYPES['.js'], 'Content-Length': bytes.length, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
         return res.end(bytes);
       }
       if (!authorized) return html(res, 401, loginPage());

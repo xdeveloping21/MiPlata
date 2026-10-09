@@ -147,11 +147,27 @@ Si prefieres que tú y las demás personas entren desde cualquier celular sin in
 
 Seguridad:
 
-- Desde el dominio nadie puede entrar como administrador: vincular, crear invitaciones, cambiar contraseñas, exportar y restaurar solo funcionan por el túnel SSH (`localhost:4174`).
+- Desde el dominio solo tu usuario puede administrar, y antes del primer cambio MiPlata vuelve a pedir tu contraseña (y tu código, si activaste la verificación en dos pasos). Exportar y restaurar copias solo funciona por el túnel SSH (`localhost:4174`).
 - Sin usuario y contraseña no se ve ningún dato. Usa contraseñas largas y distintas a las de otros sitios.
 - Tailscale sigue funcionando igual para quien lo tenga.
 
 Para dejar de publicarla: `bash /opt/miplata/deploy/publicar.sh --quitar`.
+
+## 10. Seguridad de las cuentas
+
+**Verificación en dos pasos.** Cada persona puede activarla en su perfil (toca su foto → **Verificación en dos pasos**). Escanea el QR con una app de códigos, como Google Authenticator, Microsoft Authenticator o 1Password, y escribe el código de 6 dígitos para confirmar. Desde ese momento, al entrar en un dispositivo nuevo se pide la contraseña y además el código de la app.
+
+Al activarla aparecen 10 códigos de recuperación. Cada uno sirve una sola vez si la persona pierde el celular con la app; conviene guardarlos fuera del celular. Si los pierde también, tú puedes quitarle la verificación en dos pasos desde **Personas y cuentas** (botón **Quitar dos pasos**).
+
+**Aviso de dispositivo nuevo.** Cuando alguien entra a una cuenta desde un dispositivo nuevo, el dueño de la cuenta ve un aviso al abrir MiPlata con el país, la IP y la hora. Si toca **No fui yo**, ese dispositivo pierde el acceso al instante; después conviene cambiar la contraseña.
+
+**Registro de actividad.** En **Ajustes → Actividad reciente** (solo administrador) quedan los últimos 2.000 eventos: inicios de sesión, intentos fallidos, dispositivos nuevos o revocados, invitaciones, cambios de contraseña y acciones de administración. Se guarda en `/var/lib/miplata/activity.jsonl`.
+
+## 11. Usar MiPlata sin conexión
+
+Con el dominio y HTTPS (paso 9), el celular guarda la app y los últimos datos. Si no hay señal, MiPlata abre igual, muestra **Sin conexión** arriba y permite anotar gastos. Esos cambios quedan en el celular y se envían solos al volver la conexión. Si mientras tanto se hicieron cambios desde otro dispositivo, MiPlata los une: se conservan los de ambos lados.
+
+Sin conexión no se pueden subir boletas, documentos ni fotos, y no se puede cerrar sesión hasta enviar los cambios pendientes. Al cerrar sesión se borra todo lo guardado en ese celular.
 
 ## Actualizar MiPlata
 
@@ -170,6 +186,31 @@ MiPlata guarda copias automáticas en `/var/lib/miplata/backups`. Para tener una
 ```powershell
 scp -r root@IP_DE_LA_VPS:/var/lib/miplata "$env:USERPROFILE\Documents\MiPlata-copia"
 ```
+
+### Copia diaria cifrada en Google Drive
+
+Si la VPS se pierde, las copias de `/var/lib/miplata/backups` se pierden con ella. Para tener una copia fuera, configura una vez:
+
+1. En Bitvise agrega otro túnel (**C2S**): escucha `127.0.0.1` puerto `53682`, destino `127.0.0.1` puerto `53682`.
+2. En la VPS ejecuta:
+
+   ```bash
+   sudo bash /opt/miplata/deploy/respaldo.sh configurar
+   ```
+
+3. Elige una frase de cifrado de al menos 12 caracteres. **Guárdala también fuera de la VPS** (por ejemplo, en tu gestor de contraseñas): sin ella las copias no se pueden abrir.
+4. Cuando aparezca un enlace `http://127.0.0.1:53682/auth?...`, ábrelo en el navegador de tu PC y autoriza con tu cuenta de Google. MiPlata solo puede ver los archivos que ella misma sube.
+
+Desde ese momento, cada día cerca de las 04:00 se sube una copia cifrada (AES-256) con la base de datos, boletas, documentos y fotos a la carpeta **MiPlata-respaldos** de tu Drive. Se guardan los últimos 60 días. En **Ajustes → Copias de seguridad** ves cuándo se hizo la última y si hubo algún error.
+
+Otros comandos:
+
+- Copia ahora: `sudo bash /opt/miplata/deploy/respaldo.sh ahora`
+- Ver las copias en Drive: `sudo bash /opt/miplata/deploy/respaldo.sh listar`
+- Restaurar una copia (los datos actuales quedan guardados aparte): `sudo bash /opt/miplata/deploy/respaldo.sh restaurar MiPlata-AAAA-MM-DD-HH-MM-SS.miplata`
+- Dejar de copiar: `sudo bash /opt/miplata/deploy/respaldo.sh quitar`
+
+En una VPS nueva: instala MiPlata (paso 3), ejecuta `configurar` con la misma frase y la misma cuenta de Google, y luego `restaurar`.
 
 ## Si algo falla
 
