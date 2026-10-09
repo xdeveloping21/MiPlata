@@ -136,9 +136,9 @@ const INVITE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const INVITE_MS = 7 * 24 * 60 * 60 * 1000;
 
 function cleanUsername(value) {
-  // Sin tildes ni eñes: «Raúl» y «raul» son el mismo usuario.
-  const username = String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
-  if (!/^[a-z0-9._-]{3,30}$/.test(username)) throw new Error('El usuario debe tener entre 3 y 30 letras o números, sin espacios. También puedes usar punto, guion o guion bajo.');
+  // Sin tildes ni eñes y con un solo espacio entre palabras: «Raúl  Sanhueza» y «raul sanhueza» son el mismo usuario.
+  const username = String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toLowerCase();
+  if (username.length < 3 || username.length > 30 || !/^[a-z0-9._-]+( [a-z0-9._-]+)*$/.test(username)) throw new Error('El usuario debe tener entre 3 y 30 letras o números. Puede llevar espacios, puntos o guiones.');
   return username;
 }
 

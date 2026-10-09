@@ -136,10 +136,11 @@ test('accounts are created once with an invitation and passwords are not stored 
     assert.equal(store.listPeople()[0].username, 'ana.perez');
     const ownerInvite = store.createInvite('owner');
     assert.throws(() => store.registerAccount(ownerInvite.code, 'ana.perez', 'secreta123'), /ya existe/);
-    assert.throws(() => store.registerAccount(ownerInvite.code, 'raúl s', 'clave-del-dueno'), /sin espacios/);
-    assert.equal(store.registerAccount(ownerInvite.code, 'Raúl', 'clave-del-dueno'), 'owner');
-    assert.equal(store.verifyLogin('raul', 'clave-del-dueno'), 'owner');
-    assert.equal(store.verifyLogin('RAÚL', 'clave-del-dueno'), 'owner');
+    assert.throws(() => store.registerAccount(ownerInvite.code, 'raúl@s', 'clave-del-dueno'), /entre 3 y 30/);
+    assert.equal(store.registerAccount(ownerInvite.code, '  Raúl   Sanhueza ', 'clave-del-dueno'), 'owner');
+    assert.equal(store.verifyLogin('raul sanhueza', 'clave-del-dueno'), 'owner');
+    assert.equal(store.verifyLogin('RAÚL SANHUEZA', 'clave-del-dueno'), 'owner');
+    assert.equal(store.verifyLogin('raulsanhueza', 'clave-del-dueno'), null);
     assert.throws(() => store.createInvite(ana.id), /ya tiene usuario/);
     store.setPassword(ana.id, 'nueva-clave-1');
     assert.equal(store.verifyLogin('ana.perez', 'secreta123'), null);

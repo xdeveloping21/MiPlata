@@ -667,7 +667,7 @@ function editPersonModal() {
   if (!person) return '';
   return sideDialog('PERSONAS Y CUENTAS', 'Editar ' + escapeHtml(person.name || 'tu cuenta'), '<form id="edit-person-form" novalidate>' +
     '<label class="field-label" for="edit-name">Nombre</label><input class="text-input" id="edit-name" name="name" maxlength="40" value="' + escapeHtml(person.name || '') + '" required />' +
-    (person.username ? '<label class="field-label" for="edit-username">Usuario para entrar</label><input class="text-input" id="edit-username" name="username" maxlength="30" autocapitalize="none" spellcheck="false" value="' + escapeHtml(person.username) + '" required /><p class="settings-note">Letras, números, puntos o guiones, sin espacios. Si lo cambias, avísale: lo usará la próxima vez que inicie sesión.</p>' : '<p class="settings-note">Todavía no tiene usuario. Crea una invitación para que lo elija.</p>') +
+    (person.username ? '<label class="field-label" for="edit-username">Usuario para entrar</label><input class="text-input" id="edit-username" name="username" maxlength="30" autocapitalize="none" spellcheck="false" value="' + escapeHtml(person.username) + '" required /><p class="settings-note">Letras, números, espacios, puntos o guiones. Si lo cambias, avísale: lo usará la próxima vez que inicie sesión.</p>' : '<p class="settings-note">Todavía no tiene usuario. Crea una invitación para que lo elija.</p>') +
     '<div class="dialog-actions"><button class="button button-outline" type="button" data-action="close-modal">Cancelar</button><button class="button button-primary" type="submit">Guardar cambios</button></div></form>');
 }
 
