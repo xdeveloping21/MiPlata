@@ -42,8 +42,9 @@ function openActivity(folder) {
       if (events.length > KEEP * 1.5) rewrite();
       return event;
     },
-    list(limit = 100) {
-      return events.slice(-Math.min(Math.max(Number(limit) || 100, 1), KEEP)).reverse();
+    list(limit = 100, personId = null) {
+      const source = personId ? events.filter((event) => event.personId === personId) : events;
+      return source.slice(-Math.min(Math.max(Number(limit) || 100, 1), KEEP)).reverse();
     },
     // Avisos para una persona: entradas desde un dispositivo nuevo que no sea el que está mirando.
     alertsFor(personId, currentDeviceId) {

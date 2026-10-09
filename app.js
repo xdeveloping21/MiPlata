@@ -1247,28 +1247,118 @@ function offsiteNote() {
   return '<p class="settings-note offsite warning">' + icon('info', 15) + ' La última copia fuera del servidor falló ' + escapeHtml(timeAgo(status.at)) + ': ' + escapeHtml(status.error || 'error desconocido') + '</p>';
 }
 
+// Personas y cuentas: una lista corta y, al tocar a alguien, su ficha con pestañas.
+let personView = null;
+let personActivity = { id: null, items: null };
+let peopleQuery = '';
+
+function adminPeople() {
+  const owner = { id: 'owner', name: profile.name || 'Tú', username: desktopInfo.ownerAccount || null, twoFactor: Boolean(desktopInfo.ownerTwoFactor), owner: true };
+  return [owner].concat(desktopInfo.people || []);
+}
+function devicesOfPerson(id) {
+  return id === 'owner' ? ownerDevices() : (desktopInfo.devices || []).filter(function (device) { return device.personId === id; });
+}
+function searchKey(text) {
+  return String(text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
+function personAvatar(person, size) {
+  if (person.owner) return avatarMarkup(size);
+  const words = String(person.name || '').trim().split(/\s+/).filter(Boolean);
+  const initials = words.length ? (words[0][0] + (words[1] ? words[1][0] : '')).toLocaleUpperCase('es-CL') : '';
+  const seed = String(person.username || person.name || '').split('').reduce(function (total, char) { return total + char.charCodeAt(0); }, 0);
+  return '<span class="avatar avatar-' + size + '" style="background:' + AVATAR_TONES[seed % AVATAR_TONES.length] + '">' + (initials ? escapeHtml(initials) : icon('user', 16)) + '</span>';
+}
+function deviceRow(device) {
+  const where = deviceWhere(device);
+  return '<div class="linked-device"><span>' + icon('phone', 19) + '<span class="device-text"><strong>' + escapeHtml(device.name) + '</strong>' + (where ? '<small>' + where + '</small>' : '') + '</span></span><button class="text-button" data-revoke-device="' + escapeHtml(device.id) + '" type="button">Revocar</button></div>';
+}
+function devicesLabel(count) {
+  return count ? count + (count === 1 ? ' dispositivo' : ' dispositivos') : 'sin dispositivos';
+}
+function personBadges(person) {
+  return (person.owner ? '<span class="person-badge">Dueño</span>' : '') +
+    (person.twoFactor ? '<span class="person-badge ok">' + icon('check', 11) + ' Dos pasos</span>' : '') +
+    (person.username ? '' : '<span class="person-badge muted">Sin cuenta</span>');
+}
+function personListRow(person) {
+  const devices = devicesOfPerson(person.id);
+  const seen = devices.map(function (device) { return device.lastSeen; }).filter(Boolean).sort().pop();
+  const details = [person.username ? '@' + escapeHtml(person.username) : 'Aún no crea su usuario', devicesLabel(devices.length), seen ? '<span class="person-seen">' + timeAgo(seen) + '</span>' : ''].filter(Boolean).join(' · ');
+  const key = searchKey(person.name + ' ' + (person.username || ''));
+  const hidden = peopleQuery && !key.includes(searchKey(peopleQuery));
+  return '<button class="person-item" type="button" data-open-person="' + escapeHtml(person.id) + '" data-person-search="' + escapeHtml(key) + '"' + (hidden ? ' hidden' : '') + '>' + personAvatar(person, 'small') +
+    '<span class="person-item-text"><span class="person-item-title"><strong>' + escapeHtml(person.name) + (person.owner ? ' (tú)' : '') + '</strong>' + personBadges(person) + '</span><small>' + details + '</small></span>' + icon('arrowRight', 17) + '</button>';
+}
+function peoplePanel() {
+  const people = adminPeople();
+  const deviceCount = (desktopInfo.devices || []).length;
+  const withoutTwo = people.filter(function (person) { return person.username && !person.twoFactor; }).length;
+  const stat = function (value, label, tone) { return '<div class="people-stat' + (tone ? ' ' + tone : '') + '"><strong>' + value + '</strong><small>' + label + '</small></div>'; };
+  return '<section class="panel settings-panel people-panel"><div class="settings-heading"><span class="settings-icon">' + icon('user', 20) + '</span><div><h2>Personas y cuentas</h2><p>Cada persona entra con su usuario y ve solo sus propios gastos.</p></div></div>' +
+    '<div class="people-stats">' + stat(people.length, people.length === 1 ? 'persona' : 'personas') + stat(deviceCount, deviceCount === 1 ? 'dispositivo' : 'dispositivos') + stat(withoutTwo, 'sin dos pasos', withoutTwo ? 'warning' : 'ok') + '</div>' +
+    '<label class="people-search">' + icon('search', 16) + '<input type="search" data-people-search placeholder="Buscar persona" autocomplete="off" aria-label="Buscar persona" value="' + escapeHtml(peopleQuery) + '" /></label>' +
+    '<div class="people-list">' + people.map(personListRow).join('') + '<p class="settings-note people-empty"' + (people.some(function (person) { return !peopleQuery || searchKey(person.name + ' ' + (person.username || '')).includes(searchKey(peopleQuery)); }) ? ' hidden' : '') + '>Nadie coincide con la búsqueda.</p></div>' +
+    (people.length > 1 ? '' : '<p class="settings-note">Agrega a alguien de tu familia o a un amigo para que lleve sus gastos aquí, sin ver los tuyos.</p>') +
+    '<button class="setting-action" data-action="add-person" type="button"><span>' + icon('plus', 18) + ' Agregar persona</span>' + icon('arrowRight', 18) + '</button></section>';
+}
+async function loadPersonActivity(id) {
+  personActivity = { id: id, items: null };
+  try {
+    const response = await fetch('/api/activity?limit=50&person=' + encodeURIComponent(id), { cache: 'no-store' });
+    if (!response.ok) throw new Error();
+    const items = await response.json();
+    if (personActivity.id === id) { personActivity.items = items; if (!modal) render(); }
+  } catch (error) { if (personActivity.id === id) { personActivity.items = []; if (!modal) render(); } }
+}
+function personDetail() {
+  const person = adminPeople().find(function (item) { return item.id === personView.id; });
+  if (!person) { personView = null; return ''; }
+  const id = escapeHtml(person.id);
+  const devices = devicesOfPerson(person.id);
+  const tab = personView.tab;
+  const tabs = [['devices', 'Dispositivos'], ['security', 'Seguridad'], ['activity', 'Actividad']].map(function (entry) {
+    return '<button type="button" role="tab" aria-selected="' + (tab === entry[0]) + '" data-person-tab="' + entry[0] + '" class="' + (tab === entry[0] ? 'selected' : '') + '">' + entry[1] + '</button>';
+  }).join('');
+  let body = '';
+  if (tab === 'devices') {
+    body = (devices.length ? '<div class="person-devices">' + devices.map(deviceRow).join('') + '</div>' : '<p class="settings-note">Todavía no tiene dispositivos conectados.' + (person.username ? ' Al entrar con su usuario, el dispositivo aparecerá aquí.' : '') + '</p>') +
+      '<button class="setting-action" data-pair-person="' + id + '" type="button"><span>' + icon('qr', 18) + ' Conectar otro dispositivo con QR</span>' + icon('arrowRight', 18) + '</button>';
+  } else if (tab === 'security') {
+    const twoFactorState = person.twoFactor ? 'Activada' : person.username ? 'Desactivada' : 'Sin usuario';
+    const twoFactorHint = person.twoFactor ? 'Pide un código al entrar en un dispositivo nuevo.' : person.username ? (person.owner ? 'Actívala desde tu perfil.' : 'Solo la persona puede activarla, desde su perfil.') : 'Podrá activarla cuando cree su usuario.';
+    body = '<div class="person-facts"><div><small>Usuario</small><strong>' + (person.username ? '@' + escapeHtml(person.username) : 'Sin cuenta todavía') + '</strong><small>' + (person.username ? 'Entra con este usuario y su contraseña.' : 'Crea una invitación para que elija usuario y contraseña.') + '</small></div>' +
+      '<div><small>Verificación en dos pasos</small><strong class="' + (person.twoFactor ? 'fact-ok' : person.username ? 'fact-warning' : '') + '">' + twoFactorState + '</strong><small>' + twoFactorHint + '</small></div></div>' +
+      '<button class="setting-action" data-edit-person="' + id + '" type="button"><span>' + icon('edit', 18) + ' Editar nombre y usuario</span>' + icon('arrowRight', 18) + '</button>' +
+      (person.username
+        ? '<button class="setting-action" data-person-password="' + id + '" type="button"><span>' + icon('reset', 18) + ' Cambiar contraseña</span>' + icon('arrowRight', 18) + '</button>'
+        : '<button class="setting-action" data-person-invite="' + id + '" type="button"><span>' + icon('plus', 18) + ' Crear invitación</span>' + icon('arrowRight', 18) + '</button>') +
+      (person.owner && person.username && !person.twoFactor ? '<button class="setting-action" data-action="open-profile" type="button"><span>' + icon('check', 18) + ' Activar verificación en dos pasos</span>' + icon('arrowRight', 18) + '</button>' : '') +
+      (person.twoFactor ? '<button class="setting-action" data-remove-2fa="' + id + '" type="button"><span>' + icon('reset', 18) + ' Quitar verificación en dos pasos</span>' + icon('arrowRight', 18) + '</button>' : '');
+  } else {
+    if (personActivity.id !== person.id) { loadPersonActivity(person.id); }
+    const items = personActivity.id === person.id ? personActivity.items : null;
+    body = items === null ? '<p class="settings-note">Cargando actividad...</p>' : items.length ? '<div class="activity-list">' + items.map(activityRow).join('') + '</div>' : '<p class="settings-note">Todavía no hay actividad de ' + escapeHtml(person.owner ? 'tu cuenta' : person.name) + '.</p>';
+  }
+  const danger = (person.username ? '<button class="text-button danger-text" data-remove-account="' + id + '" type="button">' + icon('close', 16) + ' Borrar cuenta</button>' : '') +
+    (person.owner ? '' : '<button class="text-button danger-text" data-remove-person="' + id + '" type="button">' + icon('trash', 16) + ' Eliminar persona</button>');
+  const subtitle = [person.username ? '@' + escapeHtml(person.username) : 'Sin cuenta todavía', devicesLabel(devices.length)].join(' · ');
+  return '<div class="person-page">' +
+    '<button class="person-back" type="button" data-action="close-person">' + icon('chevronLeft', 18) + ' Personas y cuentas</button>' +
+    '<section class="panel settings-panel person-sheet"><div class="person-sheet-head">' + personAvatar(person, 'medium') + '<div><div class="person-item-title"><h2>' + escapeHtml(person.name) + (person.owner ? ' (tú)' : '') + '</h2>' + personBadges(person) + '</div><p>' + subtitle + '</p></div></div>' +
+    (DESKTOP ? '' : '<p class="settings-note person-sheet-note">Como estás fuera de la PC, te pediremos tu contraseña antes de hacer cambios.</p>') +
+    '<div class="filter-tabs person-tabs" role="tablist">' + tabs + '</div><div class="person-tab-body">' + body + '</div>' +
+    (danger ? '<div class="danger-zone"><p>Zona de cuidado</p><div>' + danger + '</div></div>' : '') + '</section></div>';
+}
+
 function renderSettings() {
   if (LIVE) {
-    const deviceRow = function (device) {
-      const where = deviceWhere(device);
-      return '<div class="linked-device"><span>' + icon('phone', 19) + '<span class="device-text"><strong>' + escapeHtml(device.name) + '</strong>' + (where ? '<small>' + where + '</small>' : '') + '</span></span><button class="text-button" data-revoke-device="' + escapeHtml(device.id) + '" type="button">Revocar</button></div>';
-    };
+    if (ADMIN && personView) {
+      const detail = personDetail();
+      if (detail) return pageHeader('PREFERENCIAS', 'Ajustes', 'Tu dinero y tus dispositivos, bajo tu control.', '') + detail +
+        (personView.tab !== 'security' && desktopInfo.devices.some(function (device) { return device.country; }) ? '<p class="settings-note geo-credit">Países según <a href="https://db-ip.com" target="_blank" rel="noopener">IP Geolocation by DB-IP</a>. Son aproximados.</p>' : '');
+    }
     const devices = ownerDevices().map(deviceRow).join('');
-    const accountButton = function (id, username, twoFactor) {
-      return '<button class="text-button" data-edit-person="' + escapeHtml(id) + '" type="button">' + icon('edit', 16) + ' Editar</button>' + (twoFactor ? '<button class="text-button" data-remove-2fa="' + escapeHtml(id) + '" type="button">' + icon('reset', 16) + ' Quitar dos pasos</button>' : '') + (username
-        ? '<button class="text-button" data-person-password="' + escapeHtml(id) + '" type="button">' + icon('reset', 16) + ' Cambiar contraseña</button><button class="text-button danger-text" data-remove-account="' + escapeHtml(id) + '" type="button">' + icon('close', 16) + ' Borrar cuenta</button>'
-        : '<button class="text-button" data-person-invite="' + escapeHtml(id) + '" type="button">' + icon('plus', 16) + ' Crear invitación</button>');
-    };
-    const ownerRow = '<div class="person-row"><div class="person-head"><span class="person-avatar">' + icon('user', 17) + '</span><div><strong>' + escapeHtml(profile.name ? profile.name + ' (tú)' : 'Tú') + '</strong><small>' + (desktopInfo.ownerAccount ? 'Usuario: ' + escapeHtml(desktopInfo.ownerAccount) + (desktopInfo.ownerTwoFactor ? ' · con dos pasos' : '') : 'Sin usuario: crea una invitación para entrar desde otros dispositivos') + '</small></div></div>' +
-      '<div class="person-actions">' + accountButton('owner', desktopInfo.ownerAccount, desktopInfo.ownerTwoFactor) + '</div></div>';
-    const people = ownerRow + (desktopInfo.people || []).map(function (person) {
-      const own = desktopInfo.devices.filter(function (device) { return device.personId === person.id; });
-      const devicesLabel = own.length ? own.length + (own.length === 1 ? ' dispositivo' : ' dispositivos') : 'sin dispositivos';
-      return '<div class="person-row"><div class="person-head"><span class="person-avatar">' + escapeHtml(person.name.slice(0, 1).toLocaleUpperCase('es-CL')) + '</span><div><strong>' + escapeHtml(person.name) + '</strong><small>' + (person.username ? 'Usuario: ' + escapeHtml(person.username) + (person.twoFactor ? ' · con dos pasos' : '') : 'Sin usuario') + ' · ' + devicesLabel + '</small></div>' +
-        '<button class="icon-button person-remove" data-remove-person="' + escapeHtml(person.id) + '" type="button" aria-label="Eliminar a ' + escapeHtml(person.name) + '">' + icon('trash', 17) + '</button></div>' +
-        '<div class="person-actions">' + accountButton(person.id, person.username, person.twoFactor) + '<button class="text-button" data-pair-person="' + escapeHtml(person.id) + '" type="button">' + icon('qr', 16) + ' Conectar con QR</button></div>' +
-        own.map(deviceRow).join('') + '</div>';
-    }).join('');
     return pageHeader('PREFERENCIAS', 'Ajustes', 'Tu dinero y tus dispositivos, bajo tu control.', '') +
       '<div class="settings-grid"><section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('sun', 20) + '</span><div><h2>Apariencia</h2><p>Elige cómo quieres ver MiPlata.</p></div></div>' +
         '<div class="theme-options"><button type="button" data-theme-option="light" class="theme-option' + (data.theme === 'light' ? ' selected' : '') + '"><span class="theme-swatch light-swatch"></span><span><strong>Claro</strong><small>Blanco y verde menta</small></span>' + (data.theme === 'light' ? icon('check', 18) : '') + '</button>' +
@@ -1281,10 +1371,8 @@ function renderSettings() {
         (DESKTOP ? '<button class="setting-action" data-action="export-data" type="button"><span>' + icon('download', 18) + ' Exportar mis datos</span>' + icon('arrowRight', 18) + '</button>' +
         '<button class="setting-action" data-action="restore-data" type="button"><span>' + icon('reset', 18) + ' Restaurar una copia</span>' + icon('arrowRight', 18) + '</button><input id="restore-file" type="file" accept=".json,application/json" hidden />' +
         '<p class="settings-note">Copias automáticas en ' + escapeHtml(desktopInfo.backupDir || 'la carpeta de datos de MiPlata') + '</p>' : '') + offsiteNote() + '</section>' : '') +
-      (ADMIN ? '<section class="panel settings-panel people-panel"><div class="settings-heading"><span class="settings-icon">' + icon('user', 20) + '</span><div><h2>Personas y cuentas</h2><p>Cada persona entra con su usuario y ve solo sus propios gastos.</p></div></div>' + (DESKTOP ? '' : '<p class="settings-note">Como estás fuera de la PC, te pediremos tu contraseña antes de hacer cambios.</p>') + people +
-        ((desktopInfo.people || []).length ? '' : '<p class="settings-note">Agrega a alguien de tu familia o a un amigo para que lleve sus gastos aquí, sin ver los tuyos.</p>') +
-        '<button class="setting-action" data-action="add-person" type="button"><span>' + icon('plus', 18) + ' Agregar persona</span>' + icon('arrowRight', 18) + '</button>' +
-        (desktopInfo.devices.some(function (device) { return device.country; }) ? '<p class="settings-note geo-credit">Países según <a href="https://db-ip.com" target="_blank" rel="noopener">IP Geolocation by DB-IP</a>. Son aproximados.</p>' : '') + '</section>' + activityPanel() : '') + '</div>';
+      (ADMIN ? peoplePanel() + activityPanel() : '') + '</div>' +
+      (ADMIN && desktopInfo.devices.some(function (device) { return device.country; }) ? '<p class="settings-note geo-credit">Países según <a href="https://db-ip.com" target="_blank" rel="noopener">IP Geolocation by DB-IP</a>. Son aproximados.</p>' : '');
   }
   return pageHeader('PREFERENCIAS', 'Ajustes', 'Personaliza esta vista previa y prueba el enlace con tu iPhone.', '') +
     '<div class="settings-grid"><section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('sun', 20) + '</span><div><h2>Apariencia</h2><p>Elige cómo quieres ver MiPlata.</p></div></div>' +
@@ -1717,6 +1805,7 @@ function navigate(next) {
   if (next === 'annual') annualYear = Number(selectedMonth.slice(0, 4));
   route = next;
   modal = null;
+  personView = null;
   window.scrollTo({ top: 0, behavior: 'instant' });
   render();
 }
@@ -1954,6 +2043,10 @@ document.addEventListener('click', function (event) {
       .catch(function (error) { toast(error.message); });
     return;
   }
+  const openPerson = event.target.closest('[data-open-person]');
+  if (openPerson && LIVE && ADMIN) { personView = { id: openPerson.dataset.openPerson, tab: 'devices' }; personActivity = { id: null, items: null }; render(); document.querySelector('.person-page')?.scrollIntoView({ block: 'start' }); return; }
+  const personTab = event.target.closest('[data-person-tab]');
+  if (personTab && personView) { personView.tab = personTab.dataset.personTab; if (personView.tab === 'activity') personActivity = { id: null, items: null }; render(); return; }
   const pairFor = event.target.closest('[data-pair-person]');
   if (pairFor && LIVE && ADMIN) { pairPerson = pairFor.dataset.pairPerson; modal = { type: 'qr' }; pairingInfo = null; render(); startPairing(selectedNetwork); return; }
   const invite = event.target.closest('[data-person-invite]');
@@ -2042,6 +2135,7 @@ document.addEventListener('click', function (event) {
     case 'restore-data': if (LIVE && DESKTOP) document.getElementById('restore-file')?.click(); break;
     case 'reload-app': window.location.reload(); break;
     case 'open-pair': pairingStep = data.linked ? 'done' : 'start'; navigate('pair'); break;
+    case 'close-person': personView = null; render(); document.querySelector('.people-panel')?.scrollIntoView({ block: 'start' }); break;
     case 'close-modal': if (modal && modal.type === 'reauth') cancelReauth(); modal = null; render(); break;
     case 'edit-budget': modal = { type: 'budget' }; render(); document.getElementById('monthly-budget')?.focus(); break;
     case 'remove-budget': delete data.monthlyBudget; modal = null; saveData(); render(); toast('Presupuesto quitado'); break;
@@ -2100,7 +2194,7 @@ document.addEventListener('click', function (event) {
       } else if (modal.action === 'remove-person' && LIVE && ADMIN) {
         const id = modal.id;
         modal = null; render();
-        apiPost('/api/people/remove', { id }).then(function () { return refreshDesktopInfo(false); }).then(function () { render(); toast('Persona eliminada'); }).catch(function (error) { toast(error.message); });
+        apiPost('/api/people/remove', { id }).then(function () { if (personView && personView.id === id) personView = null; return refreshDesktopInfo(false); }).then(function () { render(); toast('Persona eliminada'); }).catch(function (error) { toast(error.message); });
       } else if (modal.action === 'revoke-device' && LIVE && ADMIN) {
         const id = modal.id;
         modal = null; render();
@@ -2128,6 +2222,16 @@ document.addEventListener('input', function (event) {
   if (event.target.matches('[data-amount-input]')) {
     reformatAmountInput(event.target);
     if (event.target.matches('[data-list-filter]')) applyListFilter(event.target);
+    return;
+  }
+  if (event.target.matches('[data-people-search]')) {
+    // Filtra sin volver a dibujar, para no perder lo que se está escribiendo.
+    peopleQuery = event.target.value;
+    const needle = searchKey(peopleQuery);
+    let shown = 0;
+    document.querySelectorAll('[data-person-search]').forEach(function (row) { row.hidden = Boolean(needle) && !row.dataset.personSearch.includes(needle); if (!row.hidden) shown++; });
+    const empty = document.querySelector('.people-empty');
+    if (empty) empty.hidden = shown > 0;
     return;
   }
   if (event.target.id === 'title' && modal && modal.type === 'transaction') { updateDescriptionSuggestions(); return; }

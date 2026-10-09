@@ -227,6 +227,7 @@ test('the activity log keeps events and new-device alerts per person', () => {
     activity.log('login', { personId: 'p123456789', deviceId: 'c', alert: true });
     assert.equal(activity.list(10)[0].personId, 'p123456789');
     assert.equal('empty' in activity.list(10)[1], false);
+    assert.deepEqual(activity.list(10, 'owner').map((item) => item.deviceId), ['b', 'a']);
     assert.deepEqual(activity.alertsFor('owner', 'a').map((item) => item.id), [alert.id]);
     assert.deepEqual(activity.alertsFor('owner', 'b'), []);
     activity.dismiss('owner', alert.id);

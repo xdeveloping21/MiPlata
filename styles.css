@@ -153,19 +153,63 @@ button:focus-visible, input:focus-visible {
 .linked-device { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--border); padding: 13px 0; }
 .linked-device > span { display: flex; align-items: center; gap: 10px; min-width: 0; color: var(--text-soft); }
 .linked-device strong { color: var(--text); font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
-.person-row { border-top: 1px solid var(--border); padding: 12px 0 2px; }
-.person-row .linked-device { padding-left: 46px; }
 .device-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .device-text small { color: var(--text-soft); font-size: 11px; overflow-wrap: anywhere; }
 .geo-credit a { color: inherit; }
-.person-head { display: flex; align-items: center; gap: 11px; padding-bottom: 10px; }
-.person-head > div { display: grid; gap: 2px; min-width: 0; flex: 1; }
-.person-head strong { color: var(--text); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.person-head small { color: var(--text-soft); font-size: 11px; }
-.person-avatar { display: grid; place-items: center; flex: none; width: 35px; height: 35px; border-radius: 50%; background: var(--surface-soft); color: var(--lavender-deep); font-weight: 800; }
-.person-remove { width: 34px; height: 34px; flex: none; }
-.person-actions { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 0 0 10px 46px; }
-.person-actions .text-button { display: inline-flex; align-items: center; gap: 6px; }
+.people-panel { align-self: start; }
+.person-page { scroll-margin-top: 16px; }
+.people-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
+.people-stat { display: grid; gap: 1px; padding: 10px 8px; border-radius: 12px; background: var(--surface-soft); text-align: center; }
+.people-stat strong { color: var(--text); font: 800 18px Manrope, sans-serif; }
+.people-stat small { color: var(--text-soft); font-size: 11px; }
+.people-stat.ok strong { color: var(--lavender-deep); }
+.people-stat.warning strong { color: var(--danger-text); }
+.people-search { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; padding: 0 12px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface); color: var(--text-faint); }
+.people-search:focus-within { border-color: var(--lavender); }
+.people-search input { flex: 1; min-width: 0; height: 38px; border: 0; outline: 0; background: transparent; color: var(--text); font: 600 13px Manrope, sans-serif; }
+.people-list { display: flex; flex-direction: column; }
+.people-list .people-empty { margin: 12px 0; }
+.person-item { display: flex; align-items: center; gap: 11px; width: 100%; padding: 11px 4px; border: 0; border-top: 1px solid var(--border); background: transparent; color: var(--text-faint); text-align: left; cursor: pointer; }
+.person-item:first-child { border-top: 0; }
+.person-item[hidden] { display: none; }
+.person-item:hover { background: var(--surface-soft); border-radius: 12px; }
+.person-item:hover + .person-item { border-top-color: transparent; }
+.person-item-text { display: grid; gap: 3px; min-width: 0; flex: 1; }
+.person-item-text small { color: var(--text-soft); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.person-item-title { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; min-width: 0; }
+.person-item-title strong { color: var(--text); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.person-badge { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 999px; background: var(--lavender-wash); color: var(--lavender-deep); font-size: 10px; font-weight: 800; white-space: nowrap; }
+.person-badge.muted { background: var(--surface-soft); color: var(--text-soft); }
+.person-seen { color: var(--lavender-deep); font-weight: 700; }
+.person-page { max-width: 660px; }
+.person-back { display: inline-flex; align-items: center; gap: 4px; margin: 0 0 12px -4px; padding: 6px 4px; border: 0; background: none; color: var(--lavender-deep); font: 800 13px Manrope, sans-serif; cursor: pointer; }
+.person-back:hover { text-decoration: underline; }
+.person-sheet-head { display: flex; align-items: center; gap: 13px; margin-bottom: 18px; }
+.person-sheet-head > div { display: grid; gap: 4px; min-width: 0; }
+.person-sheet-head h2 { margin: 0; font-size: 19px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.person-sheet-head p { margin: 0; color: var(--text-soft); font-size: 12px; }
+.person-sheet-note { margin: -6px 0 14px; }
+.person-tabs { display: flex; width: 100%; margin-bottom: 8px; }
+.person-tabs button { flex: 1; }
+.person-tab-body { min-height: 120px; }
+.person-tab-body > .settings-note:first-child { margin-top: 14px; }
+.person-devices .linked-device:first-child { border-top: 0; }
+.person-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0 14px; }
+.person-facts > div { display: grid; gap: 3px; padding: 11px 12px; border-radius: 12px; background: var(--surface-soft); min-width: 0; }
+.person-facts small { color: var(--text-soft); font-size: 11px; }
+.person-facts strong { color: var(--text); font-size: 13px; overflow-wrap: anywhere; }
+.person-facts strong + small { color: var(--text-faint); line-height: 1.35; }
+.person-facts .fact-ok { color: var(--lavender-deep); }
+.person-facts .fact-warning { color: var(--danger-text); }
+.danger-zone { margin-top: 22px; padding-top: 14px; border-top: 1px dashed var(--border); }
+.danger-zone p { margin: 0 0 6px; color: var(--text-faint); font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.danger-zone > div { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.danger-zone .text-button { gap: 6px; }
+@media (max-width: 760px) {
+  .person-page { max-width: none; }
+  .person-facts { grid-template-columns: 1fr; }
+  .person-tabs button { padding: 8px 6px; }
+}
 .connection-badge { display: flex; align-items: center; gap: 6px; width: fit-content; margin: 0 0 14px; padding: 7px 12px; border-radius: 999px; background: var(--surface-soft); color: var(--text-soft); font-size: 12px; font-weight: 700; }
 .login-alert { display: flex; align-items: center; gap: 14px; margin: 0 0 18px; padding: 14px 16px; border: 1px solid var(--border); border-left: 4px solid var(--danger-text); border-radius: 14px; background: var(--coral-wash); color: var(--text); }
 .login-alert > svg { flex: none; color: var(--danger-text); }

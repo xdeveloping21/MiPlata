@@ -437,7 +437,7 @@ function startServer(store, root, onPending, options = {}) {
         record('twofa-off', clientAddress, target, { by: 'admin' });
         return json(res, 200, { ok: true });
       }
-      if (pathname === '/api/activity' && req.method === 'GET') return json(res, 200, activity.list(Number(url.searchParams.get('limit')) || 100).map(describeEvent));
+      if (pathname === '/api/activity' && req.method === 'GET') return json(res, 200, activity.list(Number(url.searchParams.get('limit')) || 100, url.searchParams.get('person') || null).map(describeEvent));
       if (pathname === '/api/people' && req.method === 'POST') {
         const body = await readBody(req);
         try { const person = store.addPerson(body.name); record('person-added', clientAddress, person.id, { by: 'admin' }); return json(res, 200, person); } catch (error) { return json(res, 400, { error: error.message }); }
