@@ -149,3 +149,37 @@ test('accounts are created once with an invitation and passwords are not stored 
     fs.rmSync(folder, { recursive: true, force: true });
   }
 });
+
+test('profiles keep a name and photo per person, and admins can edit or remove accounts', async () => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'miplata-profile-test-'));
+  try {
+    const store = await openStore(folder, initialState);
+    const ana = store.addPerson('Ana');
+    const anaScope = store.forPerson(ana.id);
+    store.registerAccount(store.createInvite(ana.id).code, 'ana', 'clave-de-ana');
+    assert.deepEqual(store.getProfile(), { name: '', username: null, avatar: null });
+    assert.equal(store.setName('Raúl Soto').name, 'Raúl Soto');
+    assert.equal(anaScope.setName('Ana María').name, 'Ana María');
+    assert.equal(store.listPeople()[0].name, 'Ana María');
+    const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64)]);
+    assert.ok(anaScope.saveAvatar(jpeg).avatar);
+    assert.equal(store.readAvatar(), null);
+    assert.deepEqual(anaScope.readAvatar(), { bytes: jpeg, type: 'image/jpeg' });
+    assert.throws(() => anaScope.saveAvatar(Buffer.from('<svg/>')), /JPG, PNG o WebP/);
+    assert.equal(anaScope.removeAvatar().avatar, null);
+    assert.equal(anaScope.changePassword('mala-clave', 'otra-clave-1'), false);
+    assert.equal(anaScope.changePassword('clave-de-ana', 'otra-clave-1'), true);
+    assert.equal(store.verifyLogin('ana', 'otra-clave-1'), ana.id);
+    store.setUsername(ana.id, 'anamaria');
+    assert.equal(store.verifyLogin('anamaria', 'otra-clave-1'), ana.id);
+    store.addDevice('iPhone', 'z'.repeat(40), ana.id);
+    store.deleteAccount(ana.id);
+    assert.equal(store.verifyLogin('anamaria', 'otra-clave-1'), null);
+    assert.equal(store.deviceForToken('z'.repeat(40)), null);
+    assert.equal(store.listPeople().length, 1);
+    assert.ok(store.createInvite(ana.id).code);
+    store.close();
+  } finally {
+    fs.rmSync(folder, { recursive: true, force: true });
+  }
+});

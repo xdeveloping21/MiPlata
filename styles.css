@@ -211,6 +211,25 @@ button:focus-visible, input:focus-visible {
 .nav-item.is-active { background: var(--lavender-wash); color: var(--lavender-deep); }
 @media (min-width: 761px) { .live-app .sidebar { position: sticky; top: 0; height: 100vh; overflow-y: auto; scrollbar-width: thin; } }
 .side-widgets { display: grid; gap: 10px; margin: 20px 0 18px; }
+.side-profile { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); color: var(--text); text-align: left; cursor: pointer; }
+.side-profile:hover { border-color: var(--lavender); }
+.side-profile > span:not(.avatar) { display: grid; gap: 1px; min-width: 0; flex: 1; }
+.side-profile strong { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-profile small { color: var(--text-soft); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-profile > svg { color: var(--text-soft); flex: none; }
+.avatar { display: grid; place-items: center; flex: none; border-radius: 50%; object-fit: cover; color: #fff; font-weight: 800; overflow: hidden; }
+.avatar-small { width: 34px; height: 34px; font-size: 13px; }
+.avatar-medium { width: 38px; height: 38px; font-size: 14px; }
+.avatar-large { width: 84px; height: 84px; font-size: 30px; }
+.mobile-actions { display: flex; align-items: center; gap: 8px; }
+.mobile-avatar { padding: 0; border: 0; background: none; border-radius: 50%; cursor: pointer; }
+.profile-photo { display: flex; align-items: center; gap: 18px; margin: 4px 0 6px; }
+.profile-photo > div { display: grid; justify-items: start; gap: 8px; }
+.profile-photo .button { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; }
+.profile-section { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.profile-section h3 { margin: 0 0 4px; font-size: 14px; }
+.profile-logout { margin-top: 18px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.danger-text { color: var(--danger-text) !important; }
 .side-add { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; border: 0; border-radius: 12px; background: linear-gradient(135deg, var(--lavender), var(--lavender-deep)); color: #fff; font-size: 13px; font-weight: 800; box-shadow: 0 8px 20px rgba(19, 138, 94, .22); }
 .side-add:hover { filter: brightness(1.05); }
 [data-theme="dark"] .side-add { color: #0c1512; box-shadow: none; }

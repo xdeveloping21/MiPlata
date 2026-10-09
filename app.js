@@ -162,6 +162,7 @@ let desktopInfo = { networks: [], devices: [], people: [], pending: [], backupDi
 let pairingInfo = null;
 let selectedNetwork = '';
 let pairPerson = 'owner';
+let profile = { name: PERSON_NAME, username: null, avatar: null, admin: DESKTOP };
 let restoreCandidate = null;
 let filtersOpen = false;
 let rangeFrom = '';
@@ -527,11 +528,75 @@ function sideStatusMarkup() {
     '<span><i class="side-dot' + (desktopInfo.lastBackup ? '' : ' off') + '"></i>Copia de seguridad: ' + (desktopInfo.lastBackup ? backupLabel(desktopInfo.lastBackup) : 'pendiente') + '</span></div>';
 }
 
+const AVATAR_TONES = ['#1fa774', '#e07a5f', '#5b8def', '#c4609b', '#d9a441', '#7a6ff0'];
+
+function profileInitials() {
+  const words = String(profile.name || '').trim().split(/\s+/).filter(Boolean);
+  return words.length ? (words[0][0] + (words[1] ? words[1][0] : '')).toLocaleUpperCase('es-CL') : '';
+}
+
+function avatarMarkup(size) {
+  if (profile.avatar) return '<img class="avatar avatar-' + size + '" src="/api/profile/avatar?v=' + profile.avatar + '" alt="" />';
+  const seed = String(profile.username || profile.name || 'miplata').split('').reduce(function (total, char) { return total + char.charCodeAt(0); }, 0);
+  const initials = profileInitials();
+  return '<span class="avatar avatar-' + size + '" style="background:' + AVATAR_TONES[seed % AVATAR_TONES.length] + '">' + (initials ? escapeHtml(initials) : icon('user', size === 'large' ? 34 : 17)) + '</span>';
+}
+
+function profileSubtitle() {
+  if (!LIVE) return 'Vista previa';
+  if (profile.admin) return 'Administrador' + (profile.username ? ' · @' + escapeHtml(profile.username) : '');
+  return profile.username ? '@' + escapeHtml(profile.username) : 'Sin usuario';
+}
+
+function profileCard() {
+  return '<button class="side-profile" type="button" data-action="open-profile">' + avatarMarkup('medium') + '<span><strong>' + escapeHtml(profile.name || 'Tu perfil') + '</strong><small>' + profileSubtitle() + '</small></span>' + icon('arrowRight', 16) + '</button>';
+}
+
+function profileModal() {
+  const passwordForm = profile.username ? '<form id="own-password-form" class="profile-section" novalidate><h3>Cambiar mi contraseña</h3>' +
+    '<label class="field-label" for="current-password">Contraseña actual</label><input class="text-input" id="current-password" name="current" type="password" autocomplete="current-password" required />' +
+    '<label class="field-label" for="own-new-password">Nueva contraseña (mínimo 8 caracteres)</label><input class="text-input" id="own-new-password" name="password" type="password" autocomplete="new-password" required />' +
+    '<label class="field-label" for="own-new-password-2">Repítela</label><input class="text-input" id="own-new-password-2" name="password2" type="password" autocomplete="new-password" required />' +
+    '<div class="dialog-actions"><button class="button button-outline" type="submit">Cambiar contraseña</button></div></form>' : '';
+  return sideDialog('TU PERFIL', 'Perfil', '<div class="profile-photo">' + avatarMarkup('large') + '<div><label class="button button-outline" for="profile-photo-file">' + icon('image', 16) + ' ' + (profile.avatar ? 'Cambiar foto' : 'Subir foto') + '</label>' +
+      (profile.avatar ? '<button class="text-button" type="button" data-action="remove-avatar">Quitar foto</button>' : '') + '<input id="profile-photo-file" type="file" accept="image/*" hidden /></div></div>' +
+    '<form id="profile-name-form" class="profile-section" novalidate><label class="field-label" for="profile-name">Tu nombre</label><input class="text-input" id="profile-name" name="name" maxlength="40" value="' + escapeHtml(profile.name || '') + '" placeholder="Ejemplo: Raúl" required />' +
+      (profile.username ? '<p class="settings-note">Tu usuario para entrar: <strong>@' + escapeHtml(profile.username) + '</strong></p>' : '') +
+      '<div class="dialog-actions"><button class="button button-primary" type="submit">Guardar nombre</button></div></form>' + passwordForm +
+    (!DESKTOP ? '<button class="button button-danger full-width profile-logout" type="button" data-action="logout">' + icon('close', 16) + '<span>Cerrar sesión en este dispositivo</span></button>' : ''));
+}
+
+// Recorta al centro y achica la foto de perfil a 320 px antes de subirla.
+async function storeAvatar(file) {
+  if (!file.type.startsWith('image/')) throw new Error('Elige una imagen');
+  const image = await loadImage(await readFileAsDataUrl(file));
+  const side = Math.min(image.naturalWidth, image.naturalHeight);
+  const canvas = document.createElement('canvas');
+  canvas.width = 320; canvas.height = 320;
+  const context = canvas.getContext('2d');
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, 320, 320);
+  context.drawImage(image, (image.naturalWidth - side) / 2, (image.naturalHeight - side) / 2, side, side, 0, 0, 320, 320);
+  const blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/jpeg', 0.85); });
+  if (!blob) throw new Error('No se pudo preparar la foto');
+  const response = await fetch('/api/profile/avatar', { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || 'No se pudo guardar la foto');
+  return result;
+}
+
+async function loadProfile() {
+  try {
+    const response = await fetch('/api/profile', { cache: 'no-store' });
+    if (response.ok) profile = await response.json();
+  } catch (error) { console.warn('No se pudo cargar el perfil', error); }
+}
+
 function sidebarWidgets() {
   const today = todayDate();
   const month = today.slice(0, 7);
   const monthName = new Intl.DateTimeFormat('es-CL', { month: 'long' }).format(dateFromKey(month + '-01')).toUpperCase();
-  let html = '<div class="side-widgets"><button class="side-add" type="button" data-action="add-transaction">' + icon('plus', 17) + ' Agregar gasto <kbd>Ctrl+N</kbd></button>';
+  let html = '<div class="side-widgets">' + profileCard();
   if (data.monthlyBudget) {
     const spent = budgetSpent(month);
     const percent = Math.round(spent / data.monthlyBudget * 100);
@@ -588,6 +653,16 @@ function inviteModal() {
     '<div class="dialog-actions"><button class="button button-outline" type="button" data-action="copy-invite">Copiar código</button><button class="button button-primary" type="button" data-action="close-modal">Listo</button></div>');
 }
 
+function editPersonModal() {
+  const owner = modal.personId === 'owner';
+  const person = owner ? { name: profile.name, username: desktopInfo.ownerAccount } : personById(modal.personId);
+  if (!person) return '';
+  return sideDialog('PERSONAS Y CUENTAS', 'Editar ' + escapeHtml(person.name || 'tu cuenta'), '<form id="edit-person-form" novalidate>' +
+    '<label class="field-label" for="edit-name">Nombre</label><input class="text-input" id="edit-name" name="name" maxlength="40" value="' + escapeHtml(person.name || '') + '" required />' +
+    (person.username ? '<label class="field-label" for="edit-username">Usuario para entrar</label><input class="text-input" id="edit-username" name="username" maxlength="30" autocapitalize="none" spellcheck="false" value="' + escapeHtml(person.username) + '" required /><p class="settings-note">Letras, números, puntos o guiones, sin espacios. Si lo cambias, avísale: lo usará la próxima vez que inicie sesión.</p>' : '<p class="settings-note">Todavía no tiene usuario. Crea una invitación para que lo elija.</p>') +
+    '<div class="dialog-actions"><button class="button button-outline" type="button" data-action="close-modal">Cancelar</button><button class="button button-primary" type="submit">Guardar cambios</button></div></form>');
+}
+
 function passwordModal() {
   const person = modal.personId === 'owner' ? { name: 'ti' } : personById(modal.personId);
   return sideDialog('CUENTA', 'Nueva contraseña', '<form id="password-form" novalidate><p class="savings-form-note">Escribe la nueva contraseña para ' + escapeHtml(person ? person.name : '') + '. Los dispositivos que ya tienen la sesión iniciada seguirán conectados; puedes revocarlos aquí mismo.</p>' +
@@ -634,11 +709,11 @@ function shell(content) {
   return (LIVE ? '' : '<div class="prototype-ribbon"><span class="prototype-dot"></span> PROTOTIPO DE DISEÑO <span class="ribbon-separator">|</span> Datos ficticios</div>') +
     '<div class="app-shell">' +
       (LIVE ? '' : '<div class="titlebar"><div class="titlebar-brand"><span class="brand-mark"><img src="assets/miplata-logo.png" alt="" width="28" height="28" style="display:block;width:28px;height:28px;max-width:28px;max-height:28px" /></span><span>MiPlata</span></div><div class="titlebar-label">Vista previa para revisar el diseño</div><div class="window-controls" aria-hidden="true"><span></span><span></span><span></span></div></div>') +
-      '<aside class="sidebar"><div class="sidebar-brand"><span class="brand-mark large"><img src="assets/miplata-logo.png" alt="" width="42" height="42" style="display:block;width:42px;height:42px;max-width:42px;max-height:42px" /></span><div><strong>MiPlata</strong><small>' + (PERSON_NAME ? 'Gastos de ' + escapeHtml(PERSON_NAME) : 'Tu dinero, en orden') + '</small></div></div>' +
+      '<aside class="sidebar"><div class="sidebar-brand"><span class="brand-mark large"><img src="assets/miplata-logo.png" alt="" width="42" height="42" style="display:block;width:42px;height:42px;max-width:42px;max-height:42px" /></span><div><strong>MiPlata</strong><small>Tu dinero, en orden</small></div></div>' +
         '<nav class="side-nav" aria-label="Principal">' +
           navItem('home', 'Inicio', 'home') + navItem('transactions', 'Movimientos', 'list') + navItem('categories', 'Categorías', 'categories') + navItem('savings', 'Ahorros', 'savings') + navItem('settings', 'Ajustes', 'settings') +
         '</nav>' + sidebarWidgets() + '<div class="sidebar-foot">' + (LIVE && DESKTOP ? sideStatusMarkup() : '<span class="demo-status"><span class="status-dot"></span> ' + (LIVE ? 'Datos guardados en tu PC' : 'Modo demostración') + '</span><small>' + (LIVE ? 'Se sincronizan con tus celulares vinculados.' : 'Los cambios solo viven en este navegador.') + '</small>') + '</div></aside>' +
-      '<div class="app-body"><div class="mobile-topbar"><div class="mobile-wordmark"><span class="brand-mark"><img src="assets/miplata-logo.png" alt="" width="29" height="29" style="display:block;width:29px;height:29px;max-width:29px;max-height:29px" /></span><strong>MiPlata</strong>' + (PERSON_NAME ? '<span class="person-chip">' + escapeHtml(PERSON_NAME) + '</span>' : '') + '</div><button class="icon-button" data-action="toggle-theme" aria-label="Cambiar tema" type="button">' + icon(themeIcon, 20) + '</button></div>' +
+      '<div class="app-body"><div class="mobile-topbar"><div class="mobile-wordmark"><span class="brand-mark"><img src="assets/miplata-logo.png" alt="" width="29" height="29" style="display:block;width:29px;height:29px;max-width:29px;max-height:29px" /></span><strong>MiPlata</strong></div><div class="mobile-actions"><button class="icon-button" data-action="toggle-theme" aria-label="Cambiar tema" type="button">' + icon(themeIcon, 20) + '</button>' + (LIVE ? '<button class="mobile-avatar" data-action="open-profile" type="button" aria-label="Tu perfil">' + avatarMarkup('small') + '</button>' : '') + '</div></div>' +
         '<main class="main-content" id="main-content">' + content + '</main></div>' +
       '<nav class="mobile-nav" aria-label="Principal">' +
         navItem('home', 'Inicio', 'home') + navItem('transactions', 'Movimientos', 'list') + navItem('categories', 'Categorías', 'categories') + navItem('savings', 'Ahorros', 'savings') + navItem('settings', 'Ajustes', 'settings') +
@@ -747,7 +822,7 @@ function recentPanel() {
 
 function renderHome() {
   const t = totals();
-  const header = pageHeader('TU PANORAMA', 'Tu dinero, claro.', 'Todo lo importante de tus gastos en un solo lugar.',
+  const header = pageHeader('TU PANORAMA', LIVE && profile.name ? 'Hola, ' + escapeHtml(profile.name.split(' ')[0]) + '.' : 'Tu dinero, claro.', 'Todo lo importante de tus gastos en un solo lugar.',
     '<button class="button button-outline connect-button" data-action="show-qr" type="button">' + icon('phone', 18) + '<span>Conectar iPhone</span>' + icon('arrowRight', 17) + '</button>');
   return '<div class="home-page">' + header +
     '<div class="mobile-month"><span>Tu saldo, de un vistazo</span></div>' +
@@ -953,11 +1028,11 @@ function renderSettings() {
     };
     const devices = ownerDevices().map(deviceRow).join('');
     const accountButton = function (id, username) {
-      return username
-        ? '<button class="text-button" data-person-password="' + escapeHtml(id) + '" type="button">' + icon('edit', 16) + ' Cambiar contraseña</button>'
-        : '<button class="text-button" data-person-invite="' + escapeHtml(id) + '" type="button">' + icon('plus', 16) + ' Crear invitación</button>';
+      return '<button class="text-button" data-edit-person="' + escapeHtml(id) + '" type="button">' + icon('edit', 16) + ' Editar</button>' + (username
+        ? '<button class="text-button" data-person-password="' + escapeHtml(id) + '" type="button">' + icon('reset', 16) + ' Cambiar contraseña</button><button class="text-button danger-text" data-remove-account="' + escapeHtml(id) + '" type="button">' + icon('close', 16) + ' Borrar cuenta</button>'
+        : '<button class="text-button" data-person-invite="' + escapeHtml(id) + '" type="button">' + icon('plus', 16) + ' Crear invitación</button>');
     };
-    const ownerRow = '<div class="person-row"><div class="person-head"><span class="person-avatar">' + icon('user', 17) + '</span><div><strong>Tú</strong><small>' + (desktopInfo.ownerAccount ? 'Usuario: ' + escapeHtml(desktopInfo.ownerAccount) : 'Sin usuario: crea una invitación para entrar desde otros dispositivos') + '</small></div></div>' +
+    const ownerRow = '<div class="person-row"><div class="person-head"><span class="person-avatar">' + icon('user', 17) + '</span><div><strong>' + escapeHtml(profile.name ? profile.name + ' (tú)' : 'Tú') + '</strong><small>' + (desktopInfo.ownerAccount ? 'Usuario: ' + escapeHtml(desktopInfo.ownerAccount) : 'Sin usuario: crea una invitación para entrar desde otros dispositivos') + '</small></div></div>' +
       '<div class="person-actions">' + accountButton('owner', desktopInfo.ownerAccount) + '</div></div>';
     const people = ownerRow + (desktopInfo.people || []).map(function (person) {
       const own = desktopInfo.devices.filter(function (device) { return device.personId === person.id; });
@@ -1277,15 +1352,17 @@ function confirmationModal() {
   const category = modal.action === 'delete-category' ? categoryById(modal.id) : null;
   const device = modal.action === 'revoke-device' ? desktopInfo.devices.find(function (entry) { return entry.id === modal.id; }) : null;
   const person = modal.action === 'remove-person' ? personById(modal.id) : null;
-  const title = person ? 'Eliminar persona' : modal.action === 'reset' ? 'Restaurar el ejemplo' : modal.action === 'restore' ? 'Restaurar copia' : device ? 'Revocar dispositivo' : item ? 'Eliminar movimiento' : 'Eliminar categoría';
-  const description = person ? 'Se borrarán todos los gastos, boletas y documentos de "' + escapeHtml(person.name) + '", y sus celulares perderán el acceso. Esto no se puede deshacer.'
+  const accountOf = modal.action === 'remove-account' ? (modal.id === 'owner' ? { name: 'ti', username: desktopInfo.ownerAccount } : personById(modal.id)) : null;
+  const title = accountOf ? 'Borrar cuenta' : person ? 'Eliminar persona' : modal.action === 'reset' ? 'Restaurar el ejemplo' : modal.action === 'restore' ? 'Restaurar copia' : device ? 'Revocar dispositivo' : item ? 'Eliminar movimiento' : 'Eliminar categoría';
+  const description = accountOf ? 'Se borrará el usuario @' + escapeHtml(accountOf.username || '') + ' y se cerrarán todas las sesiones de ' + escapeHtml(accountOf.name) + '. Sus gastos se conservan, y puedes crear otra invitación cuando quieras.'
+    : person ? 'Se borrarán todos los gastos, boletas y documentos de "' + escapeHtml(person.name) + '", y sus celulares perderán el acceso. Esto no se puede deshacer.'
     : modal.action === 'reset'
     ? 'Se descartarán los cambios que hiciste en esta demostración y volverán los datos originales.'
     : modal.action === 'restore' ? 'Se reemplazarán los datos actuales por los de la copia elegida. Antes se guardará una copia automática de seguridad.'
     : device ? '¿Quieres quitar el acceso de "' + escapeHtml(device.name) + '"? Tendrás que vincularlo otra vez por QR.'
     : item ? '¿Quieres eliminar "' + escapeHtml(item.title) + '"? Este movimiento dejará de aparecer en el saldo y los gráficos.'
     : '¿Quieres eliminar la categoría "' + escapeHtml(category ? category.name : '') + '"?';
-  const actionLabel = person ? 'Eliminar persona' : modal.action === 'reset' ? 'Restaurar ejemplo' : modal.action === 'restore' ? 'Restaurar copia' : device ? 'Revocar acceso' : 'Eliminar';
+  const actionLabel = accountOf ? 'Borrar cuenta' : person ? 'Eliminar persona' : modal.action === 'reset' ? 'Restaurar ejemplo' : modal.action === 'restore' ? 'Restaurar copia' : device ? 'Revocar acceso' : 'Eliminar';
   return '<div class="modal-backdrop" data-action="cancel-confirm"></div><div class="dialog confirmation-dialog" role="alertdialog" aria-modal="true" aria-labelledby="dialog-title" aria-describedby="confirm-description">' +
     '<div class="dialog-head"><div><p class="eyebrow">CONFIRMACIÓN</p><h2 id="dialog-title">' + title + '</h2></div><button class="icon-button" data-action="cancel-confirm" type="button" aria-label="Cerrar">' + icon('close', 20) + '</button></div>' +
     '<p class="confirm-description" id="confirm-description">' + description + '</p><div class="dialog-actions confirm-actions"><button class="button button-outline" data-action="cancel-confirm" type="button">Cancelar</button><button class="button button-danger" data-action="confirm-action" type="button">' + actionLabel + '</button></div></div>';
@@ -1336,6 +1413,8 @@ function renderModal() {
   if (modal.type === 'budget') return budgetModal();
   if (modal.type === 'person') return personModal();
   if (modal.type === 'invite') return inviteModal();
+  if (modal.type === 'profile') return profileModal();
+  if (modal.type === 'edit-person') return editPersonModal();
   if (modal.type === 'password') return passwordModal();
   if (modal.type === 'goal') return goalModal();
   if (modal.type === 'recurring') return recurringModal();
@@ -1645,6 +1724,10 @@ document.addEventListener('click', function (event) {
     apiPost('/api/invites', { personId: personId }).then(function (result) { modal = { type: 'invite', personId: personId, personName: person ? person.name : '', code: result.code, expiresAt: result.expiresAt }; render(); }).catch(function (error) { toast(error.message); });
     return;
   }
+  const editPerson = event.target.closest('[data-edit-person]');
+  if (editPerson && LIVE && DESKTOP) { modal = { type: 'edit-person', personId: editPerson.dataset.editPerson }; render(); document.getElementById('edit-name')?.focus(); return; }
+  const removeAccount = event.target.closest('[data-remove-account]');
+  if (removeAccount && LIVE && DESKTOP) { modal = { type: 'confirmation', action: 'remove-account', id: removeAccount.dataset.removeAccount }; render(); return; }
   const passwordFor = event.target.closest('[data-person-password]');
   if (passwordFor && LIVE && DESKTOP) { modal = { type: 'password', personId: passwordFor.dataset.personPassword }; render(); document.getElementById('new-password')?.focus(); return; }
   const removePerson = event.target.closest('[data-remove-person]');
@@ -1680,6 +1763,12 @@ document.addEventListener('click', function (event) {
     case 'move-savings-category': if (modal && modal.id) openTransaction(null, modal.id); break;
     case 'add-category': modal = { type: 'category', id: null }; render(); break;
     case 'merge-concepts': modal = { type: 'merge-concepts', categoryId: selectedCategoryId }; render(); break;
+    case 'open-profile':
+      if (!LIVE) { toast('El perfil está disponible en la app instalada'); break; }
+      modal = { type: 'profile' }; render(); break;
+    case 'remove-avatar':
+      apiPost('/api/profile/avatar/remove', {}).then(function (result) { profile = result; render(); toast('Foto quitada'); }).catch(function (error) { toast(error.message); });
+      break;
     case 'copy-invite':
       if (modal && modal.code && navigator.clipboard) navigator.clipboard.writeText(modal.code).then(function () { toast('Código copiado'); }).catch(function () { toast('Copia el código manualmente'); });
       break;
@@ -1733,6 +1822,10 @@ document.addEventListener('click', function (event) {
         const candidate = restoreCandidate;
         modal = null; restoreCandidate = null; render();
         saveQueue.then(function () { return apiPost('/api/restore', candidate); }).then(function (result) { stateRevision = result.revision; data = result.data; render(); toast('Copia restaurada'); }).catch(function (error) { toast(error.message); });
+      } else if (modal.action === 'remove-account' && LIVE && DESKTOP) {
+        const id = modal.id;
+        modal = null; render();
+        apiPost('/api/accounts/remove', { personId: id }).then(function () { return Promise.all([refreshDesktopInfo(false), loadProfile()]); }).then(function () { render(); toast('Cuenta borrada'); }).catch(function (error) { toast(error.message); });
       } else if (modal.action === 'remove-person' && LIVE && DESKTOP) {
         const id = modal.id;
         modal = null; render();
@@ -1812,6 +1905,12 @@ document.addEventListener('change', async function (event) {
     return;
   }
   if (event.target.matches('input[type="date"][data-list-filter]')) { applyListFilter(event.target); return; }
+  if (event.target.id === 'profile-photo-file') {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    try { profile = await storeAvatar(file); render(); toast('Foto actualizada'); } catch (error) { toast(error.message); }
+    return;
+  }
   if (event.target.id === 'receipt-file') {
     const file = event.target.files && event.target.files[0];
     if (!file || !modal || modal.type !== 'transaction') return;
@@ -1872,6 +1971,24 @@ document.addEventListener('submit', function (event) {
     });
     if (conceptFilter === source) conceptFilter = target;
     modal = null; saveData(); render(); toast('Nombres unidos');
+  } else if (event.target.id === 'profile-name-form') {
+    event.preventDefault();
+    const name = String(new FormData(event.target).get('name') || '').trim();
+    if (!name) { toast('Escribe tu nombre'); return; }
+    apiPost('/api/profile', { name: name }).then(function (result) { profile = result; modal = null; render(); toast('Nombre guardado'); if (DESKTOP) refreshDesktopInfo(false); }).catch(function (error) { toast(error.message); });
+  } else if (event.target.id === 'own-password-form') {
+    event.preventDefault();
+    const form = new FormData(event.target);
+    const password = String(form.get('password') || '');
+    if (password.length < 8) { toast('La contraseña debe tener al menos 8 caracteres'); return; }
+    if (password !== String(form.get('password2') || '')) { toast('Las contraseñas no coinciden'); return; }
+    apiPost('/api/profile/password', { current: String(form.get('current') || ''), password: password }).then(function () { modal = null; render(); toast('Contraseña cambiada'); }).catch(function (error) { toast(error.message); });
+  } else if (event.target.id === 'edit-person-form') {
+    event.preventDefault();
+    const form = new FormData(event.target);
+    const payload = { personId: modal.personId, name: String(form.get('name') || '').trim() };
+    if (form.has('username')) payload.username = String(form.get('username') || '').trim();
+    apiPost('/api/people/edit', payload).then(function () { modal = null; return Promise.all([refreshDesktopInfo(false), loadProfile()]); }).then(function () { render(); toast('Cambios guardados'); }).catch(function (error) { toast(error.message); });
   } else if (event.target.id === 'password-form') {
     event.preventDefault();
     const form = new FormData(event.target);
@@ -2172,6 +2289,7 @@ async function initializeLive() {
     const saved = await response.json();
     stateRevision = saved.revision;
     data = saved.data;
+    await loadProfile();
     render();
     if (DESKTOP) await refreshDesktopInfo(false);
     setInterval(refreshLiveState, 10000);

@@ -126,6 +126,7 @@ function validateState(state) {
 
 const OWNER = 'owner';
 const PEOPLE_MAX = 20;
+const AVATAR_MAX_BYTES = 1_500_000;
 
 function validPersonId(value) {
   return typeof value === 'string' && /^p[A-Za-z0-9_-]{8,40}$/.test(value);
@@ -195,6 +196,7 @@ async function openStore(userDataPath, initialStatePath) {
   db.run('CREATE TABLE IF NOT EXISTS person_state (person_id TEXT PRIMARY KEY, revision INTEGER NOT NULL, payload TEXT NOT NULL)');
   db.run('CREATE TABLE IF NOT EXISTS person_rules (person_id TEXT NOT NULL, merchant_key TEXT NOT NULL, merchant TEXT NOT NULL, category_id TEXT NOT NULL, PRIMARY KEY (person_id, merchant_key))');
   db.run('CREATE TABLE IF NOT EXISTS accounts (person_id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, created_at TEXT NOT NULL)');
+  db.run('CREATE TABLE IF NOT EXISTS profiles (person_id TEXT PRIMARY KEY, display_name TEXT)');
   db.run('CREATE TABLE IF NOT EXISTS invites (code_hash TEXT PRIMARY KEY, person_id TEXT NOT NULL, expires_at INTEGER NOT NULL)');
   const deviceColumns = db.exec('PRAGMA table_info(devices)')[0].values.map((row) => row[1]);
   if (!deviceColumns.includes('person_id')) db.run("ALTER TABLE devices ADD COLUMN person_id TEXT NOT NULL DEFAULT 'owner'");
@@ -267,6 +269,7 @@ async function openStore(userDataPath, initialStatePath) {
   function scope(personId) {
     if (!personExists(personId)) throw new Error('Persona no encontrada');
     const owner = personId === OWNER;
+    const home = owner ? userDataPath : path.join(peopleDir, personId);
     const receipts = owner ? receiptDir : path.join(peopleDir, personId, 'receipts');
     const documents = owner ? documentDir : path.join(peopleDir, personId, 'documents');
     if (!owner) {
@@ -393,7 +396,61 @@ async function openStore(userDataPath, initialStatePath) {
       persist();
     }
 
-    return { personId, getState, saveState, restoreState, saveReceipt, readReceipt, saveDocument, readDocument, cleanupReceipts, merchantRules, setMerchantRule, replaceMerchantRules, receiptDir: receipts, documentDir: documents };
+    function avatarFile() {
+      for (const extension of Object.keys(RECEIPT_TYPES)) {
+        const file = path.join(home, 'avatar.' + extension);
+        if (fs.existsSync(file)) return { file, extension };
+      }
+      return null;
+    }
+
+    function getProfile() {
+      const name = owner ? one('SELECT display_name FROM profiles WHERE person_id = ?', [OWNER])?.display_name || '' : personName(personId) || '';
+      const avatar = avatarFile();
+      return { name, username: accountFor(personId)?.username || null, avatar: avatar ? Math.round(fs.statSync(avatar.file).mtimeMs) : null };
+    }
+
+    function setName(value) {
+      const clean = cleanPersonName(value);
+      if (owner) db.run('INSERT OR REPLACE INTO profiles (person_id, display_name) VALUES (?, ?)', [OWNER, clean]);
+      else {
+        if (listPeople().some((person) => person.id !== personId && person.name.toLocaleLowerCase('es-CL') === clean.toLocaleLowerCase('es-CL'))) throw new Error('Ya existe una persona con ese nombre');
+        db.run('UPDATE people SET name = ? WHERE id = ?', [clean, personId]);
+      }
+      persist();
+      return getProfile();
+    }
+
+    function saveAvatar(bytes) {
+      if (!Buffer.isBuffer(bytes) || !bytes.length || bytes.length > AVATAR_MAX_BYTES) throw new Error('La foto es demasiado grande');
+      const extension = receiptExtension(bytes);
+      if (!extension) throw new Error('La foto debe ser JPG, PNG o WebP');
+      removeAvatar();
+      fs.mkdirSync(home, { recursive: true });
+      fs.writeFileSync(path.join(home, 'avatar.' + extension), bytes);
+      return getProfile();
+    }
+
+    function readAvatar() {
+      const avatar = avatarFile();
+      return avatar ? { bytes: fs.readFileSync(avatar.file), type: RECEIPT_TYPES[avatar.extension] } : null;
+    }
+
+    function removeAvatar() {
+      for (const extension of Object.keys(RECEIPT_TYPES)) fs.rmSync(path.join(home, 'avatar.' + extension), { force: true });
+      return getProfile();
+    }
+
+    // La propia persona cambia su contraseña escribiendo la actual.
+    function changePassword(current, next) {
+      const account = one('SELECT password_hash FROM accounts WHERE person_id = ?', [personId]);
+      if (!account) throw new Error('Todavía no tienes usuario');
+      if (!passwordMatches(current, account.password_hash)) return false;
+      setPassword(personId, next);
+      return true;
+    }
+
+    return { personId, getProfile, setName, saveAvatar, readAvatar, removeAvatar, changePassword, getState, saveState, restoreState, saveReceipt, readReceipt, saveDocument, readDocument, cleanupReceipts, merchantRules, setMerchantRule, replaceMerchantRules, receiptDir: receipts, documentDir: documents };
   }
 
   function listPeople() {
@@ -480,6 +537,28 @@ async function openStore(userDataPath, initialStatePath) {
     persist();
   }
 
+  function setUsername(personId, username) {
+    const clean = cleanUsername(username);
+    if (!accountFor(personId)) throw new Error('Esta persona todavía no tiene usuario');
+    const taken = one('SELECT person_id FROM accounts WHERE username = ?', [clean]);
+    if (taken && taken.person_id !== personId) throw new Error('Ese usuario ya existe. Elige otro.');
+    db.run('UPDATE accounts SET username = ? WHERE person_id = ?', [clean, personId]);
+    persist();
+  }
+
+  // Quita el usuario y cierra todas sus sesiones; los gastos de la persona se conservan.
+  function deleteAccount(personId) {
+    if (!personExists(personId)) throw new Error('Persona no encontrada');
+    db.run('BEGIN TRANSACTION');
+    try {
+      db.run('DELETE FROM accounts WHERE person_id = ?', [personId]);
+      db.run('DELETE FROM invites WHERE person_id = ?', [personId]);
+      db.run('DELETE FROM devices WHERE person_id = ?', [personId]);
+      db.run('COMMIT');
+    } catch (error) { db.run('ROLLBACK'); throw error; }
+    persist();
+  }
+
   function personName(id) {
     if (id === OWNER) return null;
     return one('SELECT name FROM people WHERE id = ?', [id])?.name || null;
@@ -519,7 +598,7 @@ async function openStore(userDataPath, initialStatePath) {
     persist();
   }
 
-  return { ...ownerScope, forPerson: scope, listPeople, addPerson, removePerson, personName, accountFor, createInvite, registerAccount, verifyLogin, setPassword, addDevice, deviceForToken, listDevices, revokeDevice, lastBackupAt, backupDir, dbPath, backupNow, close: () => db.close() };
+  return { ...ownerScope, forPerson: scope, listPeople, addPerson, removePerson, personName, accountFor, createInvite, registerAccount, verifyLogin, setPassword, setUsername, deleteAccount, addDevice, deviceForToken, listDevices, revokeDevice, lastBackupAt, backupDir, dbPath, backupNow, close: () => db.close() };
 }
 
 module.exports = { openStore, validateState, OWNER };

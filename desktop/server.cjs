@@ -247,7 +247,49 @@ function startServer(store, root, onPending, options = {}) {
         return res.end(receipt.bytes);
       }
 
+      if (pathname === '/api/profile' && req.method === 'GET') return json(res, 200, { ...own.getProfile(), admin: isLocal });
+      if (pathname === '/api/profile' && req.method === 'POST') {
+        const body = await readBody(req);
+        try { return json(res, 200, { ...own.setName(body.name), admin: isLocal }); } catch (error) { return json(res, 400, { error: error.message }); }
+      }
+      if (pathname === '/api/profile/avatar' && req.method === 'POST') {
+        if (!/^image\/(jpeg|png|webp)$/.test(String(req.headers['content-type'] || ''))) return json(res, 415, { error: 'La foto debe ser JPG, PNG o WebP' });
+        const bytes = await readRaw(req, 1_500_000);
+        try { return json(res, 200, { ...own.saveAvatar(bytes), admin: isLocal }); } catch (error) { return json(res, 400, { error: error.message }); }
+      }
+      if (pathname === '/api/profile/avatar/remove' && req.method === 'POST') return json(res, 200, { ...own.removeAvatar(), admin: isLocal });
+      if (pathname === '/api/profile/avatar' && req.method === 'GET') {
+        const avatar = own.readAvatar();
+        if (!avatar) return json(res, 404, { error: 'Sin foto' });
+        res.writeHead(200, { 'Content-Type': avatar.type, 'Content-Length': avatar.bytes.length, 'Cache-Control': 'private, max-age=31536000, immutable', 'Content-Security-Policy': "default-src 'none'", 'X-Content-Type-Options': 'nosniff' });
+        return res.end(avatar.bytes);
+      }
+      if (pathname === '/api/profile/password' && req.method === 'POST') {
+        const body = await readBody(req);
+        const keys = ['ip:' + (proxied ? String(req.headers['x-miplata-client'] || 'internet') : String(req.socket.remoteAddress || '')), 'person:' + personId];
+        if (limiter.locked(keys)) return json(res, 429, { error: 'Demasiados intentos. Espera 15 minutos y vuelve a intentarlo.' });
+        let changed;
+        try { changed = own.changePassword(body.current, body.password); } catch (error) { return json(res, 400, { error: error.message }); }
+        if (!changed) { limiter.fail(keys); return json(res, 400, { error: 'La contraseña actual no es correcta' }); }
+        limiter.clear(keys);
+        return json(res, 200, { ok: true });
+      }
+
       if (pathname.startsWith('/api/') && !isLocal) return json(res, 403, { error: 'Esta acción se hace en la PC' });
+      if (pathname === '/api/people/edit' && req.method === 'POST') {
+        const body = await readBody(req);
+        try {
+          const target = store.forPerson(String(body.personId || ''));
+          if (body.name !== undefined && String(body.name).trim()) target.setName(body.name);
+          if (body.username !== undefined && store.accountFor(target.personId)) store.setUsername(target.personId, body.username);
+          return json(res, 200, target.getProfile());
+        } catch (error) { return json(res, 400, { error: error.message }); }
+      }
+      if (pathname === '/api/accounts/remove' && req.method === 'POST') {
+        const body = await readBody(req);
+        try { store.deleteAccount(String(body.personId || '')); } catch (error) { return json(res, 404, { error: error.message }); }
+        return json(res, 200, { ok: true });
+      }
       if (pathname === '/api/desktop-info' && req.method === 'GET') return json(res, 200, { networks: networks(), devices: store.listDevices(), people: store.listPeople(), ownerAccount: store.accountFor('owner')?.username || null, pending: [...pending.entries()].filter(([, item]) => item.status === 'pending' && Date.now() - item.createdAt < 300000).map(([id, item]) => ({ id, name: item.name, personId: item.personId, personName: store.personName(item.personId) })), backupDir: store.backupDir, lastBackup: store.lastBackupAt() });
       if (pathname === '/api/invites' && req.method === 'POST') {
         const body = await readBody(req);
