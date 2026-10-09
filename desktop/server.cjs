@@ -155,7 +155,7 @@ function startServer(store, root, onPending) {
       }
 
       if (pathname.startsWith('/api/') && !isLocal) return json(res, 403, { error: 'Esta acción se hace en la PC' });
-      if (pathname === '/api/desktop-info' && req.method === 'GET') return json(res, 200, { networks: networkOptions(), devices: store.listDevices(), pending: [...pending.entries()].filter(([, item]) => item.status === 'pending' && Date.now() - item.createdAt < 300000).map(([id, item]) => ({ id, name: item.name })), backupDir: store.backupDir });
+      if (pathname === '/api/desktop-info' && req.method === 'GET') return json(res, 200, { networks: networkOptions(), devices: store.listDevices(), pending: [...pending.entries()].filter(([, item]) => item.status === 'pending' && Date.now() - item.createdAt < 300000).map(([id, item]) => ({ id, name: item.name })), backupDir: store.backupDir, lastBackup: store.lastBackupAt() });
       if (pathname === '/api/pair/start' && req.method === 'POST') {
         const body = await readBody(req);
         const addresses = networkOptions();

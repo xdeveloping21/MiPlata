@@ -101,7 +101,27 @@ function validateState(state) {
     return clean;
   });
   if (Object.values(balances).some((amount) => amount < -0.00001)) throw new Error('Un retiro supera el ahorro disponible');
-  return { openingBalance: state.openingBalance, theme: state.theme, linked: false, categories, transactions };
+  const clean = { openingBalance: state.openingBalance, theme: state.theme, linked: false, categories, transactions };
+  // Presupuesto del mes, meta de ahorro y pagos fijos (barra lateral). Todos son opcionales.
+  if (state.monthlyBudget !== undefined) {
+    if (!Number.isSafeInteger(state.monthlyBudget) || state.monthlyBudget < 0 || state.monthlyBudget > 1e12) throw new Error('Presupuesto inválido');
+    if (state.monthlyBudget > 0) clean.monthlyBudget = state.monthlyBudget;
+  }
+  if (state.savingsGoal !== undefined && state.savingsGoal !== null) {
+    const goal = state.savingsGoal;
+    if (!goal || typeof goal.name !== 'string' || !goal.name.trim() || goal.name.length > 32 || !Number.isSafeInteger(goal.target) || goal.target <= 0 || goal.target > 1e12) throw new Error('Meta de ahorro inválida');
+    clean.savingsGoal = { name: goal.name.trim(), target: goal.target };
+  }
+  if (state.recurring !== undefined) {
+    if (!Array.isArray(state.recurring) || state.recurring.length > 50) throw new Error('Pagos fijos inválidos');
+    const recurringIds = new Set();
+    clean.recurring = state.recurring.map((item) => {
+      if (!item || typeof item.id !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(item.id) || recurringIds.has(item.id) || typeof item.title !== 'string' || !item.title.trim() || item.title.length > 80 || !Number.isSafeInteger(item.amount) || item.amount <= 0 || item.amount > 1e12 || !Number.isInteger(item.day) || item.day < 1 || item.day > 31 || categoryMap.get(item.categoryId)?.kind !== 'expense' || item.categoryId === 'savings') throw new Error('Pago fijo inválido');
+      recurringIds.add(item.id);
+      return { id: item.id, title: item.title.trim(), amount: item.amount, categoryId: item.categoryId, day: item.day };
+    });
+  }
+  return clean;
 }
 
 async function openStore(userDataPath, initialStatePath) {
@@ -240,6 +260,13 @@ async function openStore(userDataPath, initialStatePath) {
 
   cleanupReceipts();
 
+  function lastBackupAt() {
+    try {
+      const times = fs.readdirSync(backupDir).filter((name) => name.endsWith('.sqlite')).map((name) => fs.statSync(path.join(backupDir, name)).mtimeMs);
+      return times.length ? new Date(Math.max(...times)).toISOString() : null;
+    } catch (error) { return null; }
+  }
+
   function addDevice(name, token) {
     const id = crypto.randomUUID();
     db.run('INSERT INTO devices (id, token_hash, name, created_at) VALUES (?, ?, ?, ?)', [id, crypto.createHash('sha256').update(token).digest('hex'), String(name).slice(0, 80), new Date().toISOString()]);
@@ -301,7 +328,7 @@ async function openStore(userDataPath, initialStatePath) {
     persist();
   }
 
-  return { getState, saveState, restoreState, addDevice, deviceForToken, listDevices, revokeDevice, merchantRules, setMerchantRule, replaceMerchantRules, saveReceipt, readReceipt, receiptDir, saveDocument, readDocument, documentDir, backupDir, dbPath, backupNow, close: () => db.close() };
+  return { getState, saveState, restoreState, addDevice, deviceForToken, listDevices, revokeDevice, merchantRules, setMerchantRule, replaceMerchantRules, saveReceipt, readReceipt, receiptDir, saveDocument, readDocument, documentDir, lastBackupAt, backupDir, dbPath, backupNow, close: () => db.close() };
 }
 
 module.exports = { openStore, validateState };

@@ -463,6 +463,132 @@ function navItem(id, label, iconName) {
     icon(iconName, 20) + '<span>' + label + '</span></button>';
 }
 
+// Barra lateral: presupuesto del mes, meta de ahorro, pagos fijos y estado de la PC.
+function dateFromKey(value) { return new Date(value + 'T12:00:00'); }
+
+function daysBetween(from, to) { return Math.round((dateFromKey(to) - dateFromKey(from)) / 86400000); }
+
+function daysInMonth(month) { return new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate(); }
+
+function nextMonthKey(month) {
+  const next = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 1);
+  return next.getFullYear() + '-' + String(next.getMonth() + 1).padStart(2, '0');
+}
+
+function budgetSpent(month) {
+  return data.transactions.filter(function (item) { return item.kind === 'expense' && item.categoryId !== 'savings' && item.date.startsWith(month); }).reduce(function (sum, item) { return sum + item.amount; }, 0);
+}
+
+function savingsGoalProgress() {
+  return Math.max(0, data.transactions.reduce(function (sum, item) { return item.categoryId === 'savings' ? sum + item.amount : item.categoryId === 'savings-return' ? sum - item.amount : sum; }, 0));
+}
+
+// Un pago fijo se da por pagado en el mes si hay un gasto con el mismo nombre y categoría.
+function recurringPaid(entry, month) {
+  const key = conceptKey(entry.title);
+  return data.transactions.some(function (item) { return item.kind === 'expense' && item.categoryId === entry.categoryId && item.date.startsWith(month) && conceptKey(item.title) === key; });
+}
+
+function upcomingPayments() {
+  const today = todayDate();
+  const month = today.slice(0, 7);
+  return (data.recurring || []).map(function (entry) {
+    const dueMonth = recurringPaid(entry, month) ? nextMonthKey(month) : month;
+    const due = dueMonth + '-' + String(Math.min(entry.day, daysInMonth(dueMonth))).padStart(2, '0');
+    return { entry: entry, due: due, days: daysBetween(today, due) };
+  }).sort(function (a, b) { return a.due < b.due ? -1 : a.due > b.due ? 1 : 0; });
+}
+
+function dueLabel(payment) {
+  if (payment.days < -1) return 'Venció hace ' + -payment.days + ' días';
+  if (payment.days === -1) return 'Venció ayer';
+  if (payment.days === 0) return 'Vence hoy';
+  if (payment.days === 1) return 'Mañana';
+  if (payment.days <= 7) return 'En ' + payment.days + ' días';
+  return new Intl.DateTimeFormat('es-CL', { day: 'numeric', month: 'short' }).format(dateFromKey(payment.due));
+}
+
+function backupLabel(iso) {
+  const date = new Date(iso);
+  const day = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+  const time = String(date.getHours()).padStart(2, '0') + ':' + String(date.getMinutes()).padStart(2, '0');
+  const ago = daysBetween(day, todayDate());
+  return ago === 0 ? 'hoy ' + time : ago === 1 ? 'ayer ' + time : prettyDate(day);
+}
+
+function sideStatusMarkup() {
+  const devices = desktopInfo.devices || [];
+  const phone = devices.length === 1 ? escapeHtml(devices[0].name || 'Celular') + ' vinculado' : devices.length ? devices.length + ' celulares vinculados' : 'Sin celular vinculado';
+  return '<div class="side-status" data-side-status><button type="button" data-action="show-qr"><i class="side-dot' + (devices.length ? '' : ' off') + '"></i>' + phone + '</button>' +
+    '<span><i class="side-dot' + (desktopInfo.lastBackup ? '' : ' off') + '"></i>Copia de seguridad: ' + (desktopInfo.lastBackup ? backupLabel(desktopInfo.lastBackup) : 'pendiente') + '</span></div>';
+}
+
+function sidebarWidgets() {
+  const today = todayDate();
+  const month = today.slice(0, 7);
+  const monthName = new Intl.DateTimeFormat('es-CL', { month: 'long' }).format(dateFromKey(month + '-01')).toUpperCase();
+  let html = '<div class="side-widgets"><button class="side-add" type="button" data-action="add-transaction">' + icon('plus', 17) + ' Agregar gasto <kbd>Ctrl+N</kbd></button>';
+  if (data.monthlyBudget) {
+    const spent = budgetSpent(month);
+    const percent = Math.round(spent / data.monthlyBudget * 100);
+    const left = data.monthlyBudget - spent;
+    const daysLeft = daysInMonth(month) - Number(today.slice(8)) + 1;
+    html += '<button class="side-card side-month' + (percent >= 100 ? ' is-over' : percent >= 85 ? ' is-warn' : '') + '" type="button" data-action="edit-budget"><span class="side-eyebrow">PRESUPUESTO DE ' + monthName + '</span><span class="side-month-body"><span class="side-ring" style="--percent:' + Math.min(100, percent) + '%"><span>' + percent + ' %</span></span>' +
+      '<span><strong>' + money(Math.abs(left)) + '</strong><small>' + (left >= 0 ? 'te quedan de ' + money(data.monthlyBudget) : 'sobre tu presupuesto') + '</small><small>' + daysLeft + (daysLeft === 1 ? ' día restante' : ' días restantes') + '</small></span></span></button>';
+  } else {
+    html += '<button class="side-card side-empty" type="button" data-action="edit-budget"><span class="side-eyebrow">PRESUPUESTO</span><span>' + icon('plus', 15) + ' Define cuánto quieres gastar al mes</span></button>';
+  }
+  if (data.savingsGoal) {
+    const saved = savingsGoalProgress();
+    const percent = Math.min(100, Math.round(saved / data.savingsGoal.target * 100));
+    html += '<button class="side-card side-goal" type="button" data-action="edit-goal"><span class="side-eyebrow">META DE AHORRO</span><strong><span>' + escapeHtml(data.savingsGoal.name) + '</span><span>' + percent + ' %</span></strong><span class="side-track"><i style="width:' + percent + '%"></i></span><small>' + money(saved) + ' de ' + money(data.savingsGoal.target) + '</small></button>';
+  } else {
+    html += '<button class="side-card side-empty" type="button" data-action="edit-goal"><span class="side-eyebrow">META DE AHORRO</span><span>' + icon('plus', 15) + ' Crea una meta, como unas vacaciones</span></button>';
+  }
+  const upcoming = upcomingPayments().slice(0, 3);
+  if (upcoming.length) {
+    html += '<section class="side-card side-upcoming"><span class="side-eyebrow">PRÓXIMOS PAGOS <button class="side-link" type="button" data-action="manage-recurring">Editar</button></span>' + upcoming.map(function (payment) {
+      return '<button class="side-up' + (payment.days < 0 ? ' is-late' : payment.days <= 3 ? ' is-soon' : '') + '" type="button" data-pay-recurring="' + escapeHtml(payment.entry.id) + '" title="Registrar este pago">' + categoryIcon(categoryById(payment.entry.categoryId), 14) + '<span><b>' + escapeHtml(payment.entry.title) + '</b><small>' + dueLabel(payment) + '</small></span><em>' + money(payment.entry.amount) + '</em></button>';
+    }).join('') + '</section>';
+  } else {
+    html += '<button class="side-card side-empty" type="button" data-action="manage-recurring"><span class="side-eyebrow">PRÓXIMOS PAGOS</span><span>' + icon('plus', 15) + ' Agrega tus pagos fijos, como el arriendo</span></button>';
+  }
+  return html + '</div>';
+}
+
+function sideDialog(eyebrow, title, body) {
+  return '<div class="modal-backdrop" data-action="close-modal"></div><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title"><div class="dialog-head"><div><p class="eyebrow">' + eyebrow + '</p><h2 id="dialog-title">' + title + '</h2></div><button class="icon-button" data-action="close-modal" type="button" aria-label="Cerrar">' + icon('close', 20) + '</button></div>' + body + '</div>';
+}
+
+function budgetModal() {
+  return sideDialog('TU MES', 'Presupuesto mensual', '<form id="budget-form" novalidate><p class="savings-form-note">Cuánto quieres gastar como máximo cada mes. Lo que apartas para ahorros no cuenta como gasto.</p>' +
+    '<label class="field-label" for="monthly-budget">Monto mensual</label><div class="amount-input"><span>$</span><input id="monthly-budget" name="budget" type="text" inputmode="numeric" autocomplete="off" data-amount-input value="' + (data.monthlyBudget ? formatAmountValue(data.monthlyBudget) : '') + '" placeholder="0" required /></div>' +
+    '<div class="dialog-actions">' + (data.monthlyBudget ? '<button class="button button-danger" type="button" data-action="remove-budget">' + icon('trash', 17) + '<span>Quitar</span></button>' : '') + '<button class="button button-primary" type="submit">Guardar presupuesto</button></div></form>');
+}
+
+function goalModal() {
+  const goal = data.savingsGoal;
+  return sideDialog('TUS AHORROS', 'Meta de ahorro', '<form id="goal-form" novalidate><p class="savings-form-note">El avance se calcula con lo que llevas ahorrado en la sección Ahorros.</p>' +
+    '<label class="field-label" for="goal-name">Nombre de la meta</label><input class="text-input" id="goal-name" name="name" maxlength="32" value="' + escapeHtml(goal ? goal.name : '') + '" placeholder="Ejemplo: Vacaciones" required />' +
+    '<label class="field-label" for="goal-target">Monto que quieres juntar</label><div class="amount-input"><span>$</span><input id="goal-target" name="target" type="text" inputmode="numeric" autocomplete="off" data-amount-input value="' + (goal ? formatAmountValue(goal.target) : '') + '" placeholder="0" required /></div>' +
+    '<div class="dialog-actions">' + (goal ? '<button class="button button-danger" type="button" data-action="remove-goal">' + icon('trash', 17) + '<span>Quitar</span></button>' : '') + '<button class="button button-primary" type="submit">Guardar meta</button></div></form>');
+}
+
+function recurringModal() {
+  const choices = data.categories.filter(function (category) { return category.kind === 'expense' && category.id !== 'savings'; }).map(function (category) {
+    return { value: category.id, label: category.name, leading: '<span class="dropdown-symbol ' + toneClass(category.tone) + '"' + toneStyle(category.tone) + '>' + icon(category.icon, 16) + '</span>' };
+  });
+  const list = (data.recurring || []).map(function (entry) {
+    return '<div class="recurring-row">' + categoryIcon(categoryById(entry.categoryId), 16) + '<span><strong>' + escapeHtml(entry.title) + '</strong><small>Día ' + entry.day + ' de cada mes <span class="detail-separator">·</span> ' + money(entry.amount) + '</small></span><button class="icon-button subtle" type="button" data-delete-recurring="' + escapeHtml(entry.id) + '" aria-label="Eliminar ' + escapeHtml(entry.title) + '">' + icon('trash', 17) + '</button></div>';
+  }).join('');
+  return sideDialog('TUS CUENTAS', 'Pagos fijos', (list ? '<div class="recurring-list">' + list + '</div>' : '<p class="savings-form-note">Agrega lo que pagas todos los meses. MiPlata te avisará cuándo vence cada uno y lo dará por pagado cuando registres el gasto.</p>') +
+    '<form id="recurring-form" novalidate><label class="field-label" for="recurring-title">Nombre</label><input class="text-input" id="recurring-title" name="title" maxlength="80" placeholder="Ejemplo: Internet" required />' +
+    '<div class="form-row"><div><label class="field-label" for="recurring-amount">Monto</label><input class="text-input" id="recurring-amount" name="amount" type="text" inputmode="numeric" autocomplete="off" data-amount-input placeholder="$ 0" required /></div>' +
+    '<div><label class="field-label" for="recurring-day">Día de pago</label><input class="text-input" id="recurring-day" name="day" type="number" min="1" max="31" inputmode="numeric" placeholder="1 a 31" required /></div></div>' +
+    customSelect('recurring-category', 'Categoría', 'category', choices[0] ? choices[0].value : '', choices, 'form-dropdown') +
+    '<div class="dialog-actions"><button class="button button-primary" type="submit">' + icon('plus', 17) + ' Agregar pago fijo</button></div></form>');
+}
+
 function shell(content) {
   const themeIcon = data.theme === 'light' ? 'moon' : 'sun';
   return (LIVE ? '' : '<div class="prototype-ribbon"><span class="prototype-dot"></span> PROTOTIPO DE DISEÑO <span class="ribbon-separator">|</span> Datos ficticios</div>') +
@@ -471,7 +597,7 @@ function shell(content) {
       '<aside class="sidebar"><div class="sidebar-brand"><span class="brand-mark large"><img src="assets/miplata-logo.png" alt="" width="42" height="42" style="display:block;width:42px;height:42px;max-width:42px;max-height:42px" /></span><div><strong>MiPlata</strong><small>Tu dinero, en orden</small></div></div>' +
         '<nav class="side-nav" aria-label="Principal">' +
           navItem('home', 'Inicio', 'home') + navItem('transactions', 'Movimientos', 'list') + navItem('categories', 'Categorías', 'categories') + navItem('savings', 'Ahorros', 'savings') + navItem('settings', 'Ajustes', 'settings') +
-        '</nav><div class="sidebar-foot"><span class="demo-status"><span class="status-dot"></span> ' + (LIVE ? 'Datos guardados en tu PC' : 'Modo demostración') + '</span><small>' + (LIVE ? 'Se sincronizan con tus celulares vinculados.' : 'Los cambios solo viven en este navegador.') + '</small></div></aside>' +
+        '</nav>' + sidebarWidgets() + '<div class="sidebar-foot">' + (LIVE && DESKTOP ? sideStatusMarkup() : '<span class="demo-status"><span class="status-dot"></span> ' + (LIVE ? 'Datos guardados en tu PC' : 'Modo demostración') + '</span><small>' + (LIVE ? 'Se sincronizan con tus celulares vinculados.' : 'Los cambios solo viven en este navegador.') + '</small>') + '</div></aside>' +
       '<div class="app-body"><div class="mobile-topbar"><div class="mobile-wordmark"><span class="brand-mark"><img src="assets/miplata-logo.png" alt="" width="29" height="29" style="display:block;width:29px;height:29px;max-width:29px;max-height:29px" /></span><strong>MiPlata</strong></div><button class="icon-button" data-action="toggle-theme" aria-label="Cambiar tema" type="button">' + icon(themeIcon, 20) + '</button></div>' +
         '<main class="main-content" id="main-content">' + content + '</main></div>' +
       '<nav class="mobile-nav" aria-label="Principal">' +
@@ -848,12 +974,13 @@ function transactionModal() {
   const item = modal.id ? data.transactions.find(function (entry) { return entry.id === modal.id; }) : null;
   const kind = modal.kind || (item && item.kind) || 'expense';
   const categories = data.categories.filter(function (entry) { return entry.kind === kind; });
-  const date = item ? item.date : defaultEntryDate();
+  const prefill = !item && modal.prefill;
+  const date = item ? item.date : prefill ? prefill.date : defaultEntryDate();
   return '<div class="modal-backdrop" data-action="close-modal"></div><div class="dialog transaction-dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">' +
     '<div class="dialog-head"><div><p class="eyebrow">MOVIMIENTO</p><h2 id="dialog-title">' + (item ? 'Editar movimiento' : 'Agregar movimiento') + '</h2></div><button class="icon-button" data-action="close-modal" type="button" aria-label="Cerrar">' + icon('close', 20) + '</button></div>' +
     '<form id="transaction-form" novalidate><div class="kind-switch"><button type="button" data-modal-kind="expense" class="' + (kind === 'expense' ? 'selected' : '') + '">Gasto</button><button type="button" data-modal-kind="income" class="' + (kind === 'income' ? 'selected' : '') + '">Ingreso</button></div>' +
-    '<label class="field-label" for="amount">Monto</label><div class="amount-input"><span>$</span><input id="amount" name="amount" inputmode="numeric" type="text" autocomplete="off" data-amount-input value="' + (item ? formatAmountValue(item.amount) : '') + '" placeholder="0" required autofocus /></div>' +
-    '<label class="field-label" for="title">Descripción</label><div class="description-autocomplete"><input class="text-input" id="title" name="title" maxlength="80" autocomplete="off" aria-autocomplete="list" aria-expanded="false" aria-controls="description-suggestions" value="' + escapeHtml(item ? item.title : '') + '" placeholder="' + (kind === 'income' ? '¿De dónde vino el ingreso?' : '¿En qué gastaste?') + '" required /><div id="description-suggestions" class="description-suggestions" role="listbox" hidden></div></div>' +
+    '<label class="field-label" for="amount">Monto</label><div class="amount-input"><span>$</span><input id="amount" name="amount" inputmode="numeric" type="text" autocomplete="off" data-amount-input value="' + (item ? formatAmountValue(item.amount) : prefill ? formatAmountValue(prefill.amount) : '') + '" placeholder="0" required autofocus /></div>' +
+    '<label class="field-label" for="title">Descripción</label><div class="description-autocomplete"><input class="text-input" id="title" name="title" maxlength="80" autocomplete="off" aria-autocomplete="list" aria-expanded="false" aria-controls="description-suggestions" value="' + escapeHtml(item ? item.title : prefill ? prefill.title : '') + '" placeholder="' + (kind === 'income' ? '¿De dónde vino el ingreso?' : '¿En qué gastaste?') + '" required /><div id="description-suggestions" class="description-suggestions" role="listbox" hidden></div></div>' +
     '<label class="field-label" for="transaction-note">Detalle <span class="field-optional">(opcional)</span></label><input class="text-input" id="transaction-note" name="note" maxlength="160" value="' + escapeHtml(item ? item.note || '' : '') + '" placeholder="Ejemplo: latte y medialuna" />' +
     '<div class="form-row"><div>' + customSelect('category-picker', 'Categoría', 'category', item ? item.categoryId : modal.categoryId || '', categories.map(function (category) {
       return { value: category.id, label: category.name, leading: '<span class="dropdown-symbol ' + toneClass(category.tone) + '"' + toneStyle(category.tone) + '>' + icon(category.icon, 16) + '</span>' };
@@ -1143,6 +1270,9 @@ function renderModal() {
   if (modal.type === 'qr') return qrModal();
   if (modal.type === 'balance') return '<div class="modal-backdrop" data-action="close-modal"></div><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title"><div class="dialog-head"><div><p class="eyebrow">TUS DATOS</p><h2 id="dialog-title">Saldo inicial</h2></div><button class="icon-button" data-action="close-modal" type="button" aria-label="Cerrar">' + icon('close', 20) + '</button></div><form id="balance-form"><p class="savings-form-note">El saldo actual suma tus movimientos a este importe.</p><label class="field-label" for="opening-balance">Saldo inicial en pesos</label><div class="amount-input"><span>$</span><input id="opening-balance" name="balance" type="text" inputmode="numeric" autocomplete="off" data-amount-input data-amount-negative value="' + formatAmountValue(data.openingBalance) + '" required /></div><div class="dialog-actions"><button class="button button-outline" type="button" data-action="close-modal">Cancelar</button><button class="button button-primary" type="submit">Guardar saldo</button></div></form></div>';
   if (modal.type === 'confirmation') return confirmationModal();
+  if (modal.type === 'budget') return budgetModal();
+  if (modal.type === 'goal') return goalModal();
+  if (modal.type === 'recurring') return recurringModal();
   return '';
 }
 
@@ -1404,6 +1534,20 @@ document.addEventListener('click', function (event) {
     else openTransaction(null, editTransaction.dataset.editTransaction);
     return;
   }
+  const payRecurring = event.target.closest('[data-pay-recurring]');
+  if (payRecurring) {
+    const payment = upcomingPayments().find(function (entry) { return entry.entry.id === payRecurring.dataset.payRecurring; });
+    if (!payment) return;
+    modal = { type: 'transaction', kind: 'expense', id: null, categoryId: payment.entry.categoryId, receiptId: null, documentId: null, documentName: null, prefill: { amount: payment.entry.amount, title: payment.entry.title, date: payment.days < 0 ? todayDate() : payment.due } };
+    render();
+    return;
+  }
+  const deleteRecurring = event.target.closest('[data-delete-recurring]');
+  if (deleteRecurring) {
+    data.recurring = (data.recurring || []).filter(function (entry) { return entry.id !== deleteRecurring.dataset.deleteRecurring; });
+    saveData(); render(); toast('Pago fijo eliminado');
+    return;
+  }
   const editSavings = event.target.closest('[data-edit-savings]');
   if (editSavings) { openSavings(null, editSavings.dataset.editSavings); return; }
   const editCategory = event.target.closest('[data-edit-category]');
@@ -1463,6 +1607,11 @@ document.addEventListener('click', function (event) {
     case 'reload-app': window.location.reload(); break;
     case 'open-pair': pairingStep = data.linked ? 'done' : 'start'; navigate('pair'); break;
     case 'close-modal': modal = null; render(); break;
+    case 'edit-budget': modal = { type: 'budget' }; render(); document.getElementById('monthly-budget')?.focus(); break;
+    case 'remove-budget': delete data.monthlyBudget; modal = null; saveData(); render(); toast('Presupuesto quitado'); break;
+    case 'edit-goal': modal = { type: 'goal' }; render(); document.getElementById('goal-name')?.focus(); break;
+    case 'remove-goal': delete data.savingsGoal; modal = null; saveData(); render(); toast('Meta quitada'); break;
+    case 'manage-recurring': modal = { type: 'recurring' }; render(); document.getElementById('recurring-title')?.focus(); break;
     case 'toggle-filters': filtersOpen = !filtersOpen; render(); if (filtersOpen) document.getElementById('filter-from')?.focus(); break;
     case 'clear-filters': rangeFrom = ''; rangeTo = ''; amountMin = ''; amountMax = ''; render(); break;
     case 'view-receipt': if (modal && modal.receiptId) openReceiptViewer(modal.receiptId); break;
@@ -1629,6 +1778,33 @@ document.addEventListener('submit', function (event) {
     });
     if (conceptFilter === source) conceptFilter = target;
     modal = null; saveData(); render(); toast('Nombres unidos');
+  } else if (event.target.id === 'budget-form') {
+    event.preventDefault();
+    const budget = parseAmountText(new FormData(event.target).get('budget'));
+    if (!Number.isSafeInteger(budget) || budget <= 0 || budget > 1e12) { toast('Ingresa un presupuesto válido en pesos'); return; }
+    data.monthlyBudget = budget;
+    modal = null; saveData(); render(); toast('Presupuesto guardado');
+  } else if (event.target.id === 'goal-form') {
+    event.preventDefault();
+    const form = new FormData(event.target);
+    const name = String(form.get('name') || '').trim();
+    const target = parseAmountText(form.get('target'));
+    if (!name || name.length > 32 || !Number.isSafeInteger(target) || target <= 0 || target > 1e12) { toast('Escribe un nombre y un monto válido'); return; }
+    data.savingsGoal = { name: name, target: target };
+    modal = null; saveData(); render(); toast('Meta guardada');
+  } else if (event.target.id === 'recurring-form') {
+    event.preventDefault();
+    const form = new FormData(event.target);
+    const title = String(form.get('title') || '').trim();
+    const amount = parseAmountText(form.get('amount'));
+    const day = Number(form.get('day'));
+    const categoryId = String(form.get('category') || '');
+    const category = categoryById(categoryId);
+    if (!title || title.length > 80 || !Number.isSafeInteger(amount) || amount <= 0 || !Number.isInteger(day) || day < 1 || day > 31 || !category || category.kind !== 'expense' || category.id === 'savings') { toast('Revisa el nombre, el monto y el día (1 a 31)'); return; }
+    if ((data.recurring || []).length >= 50) { toast('Puedes tener hasta 50 pagos fijos'); return; }
+    data.recurring = (data.recurring || []).concat({ id: 'p' + Date.now(), title: title, amount: amount, categoryId: categoryId, day: day });
+    saveData(); render(); toast('Pago fijo agregado');
+    document.getElementById('recurring-title')?.focus();
   } else if (event.target.id === 'balance-form') {
     event.preventDefault();
     const balance = parseAmountText(new FormData(event.target).get('balance'));
@@ -1718,6 +1894,11 @@ document.addEventListener('submit', function (event) {
 });
 
 document.addEventListener('keydown', function (event) {
+  if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'n') {
+    event.preventDefault();
+    if (!modal) openTransaction('expense');
+    return;
+  }
   if (event.target.id === 'title') {
     const list = document.getElementById('description-suggestions');
     if (list && !list.hidden) {
@@ -1844,8 +2025,11 @@ async function refreshDesktopInfo(openApproval) {
     const response = await fetch('/api/desktop-info', { cache: 'no-store' });
     if (!response.ok) return;
     const next = await response.json();
-    const changed = JSON.stringify(next) !== JSON.stringify(desktopInfo);
+    const withoutBackup = function (info) { return JSON.stringify(Object.assign({}, info, { lastBackup: null })); };
+    const changed = withoutBackup(next) !== withoutBackup(desktopInfo);
     desktopInfo = next;
+    const status = document.querySelector('[data-side-status]');
+    if (status) status.outerHTML = sideStatusMarkup();
     if (!selectedNetwork && next.networks.length) selectedNetwork = next.networks[0].address;
     if (openApproval && next.pending.length && !modal) modal = { type: 'qr' };
     if (changed && (route === 'settings' || modal?.type === 'qr' || openApproval)) render();
