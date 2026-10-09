@@ -102,6 +102,24 @@ Tienes dos formas:
 - **Con el túnel SSH** del paso 5 y <http://localhost:4174>. Tienes todas las funciones.
 - **Por Tailscale, como el iPhone.** En la ventana de vincular del paso 6 aparece el enlace del QR debajo de la imagen. Ábrelo en el navegador de la PC, aprueba la solicitud y luego entra siempre a la dirección de Tailscale (`http://100.x.x.x:4174`). Así no necesitas el túnel para registrar gastos.
 
+## 8. Agregar a otras personas
+
+Cada persona tiene sus propios gastos, categorías, ahorros, boletas y documentos. Nadie ve los datos de otra persona, y ellas tampoco ven los tuyos.
+
+**Darle acceso a la VPS por Tailscale** (una vez por persona):
+
+1. La persona crea su propia cuenta gratuita de [Tailscale](https://tailscale.com) e instala la app en su celular.
+2. Tú entras al panel de Tailscale (<https://login.tailscale.com/admin/machines>), buscas la máquina **MiPlata**, abres el menú **⋯** y eliges **Share…**.
+3. Le envías la invitación por correo o el enlace. Cuando la acepte, la VPS aparecerá en su Tailscale con la misma dirección (`http://100.x.x.x:4174`). Solo verá esa máquina, no tu PC ni tu iPhone.
+
+**Crear su espacio en MiPlata:**
+
+1. En la PC, con el túnel del paso 5, abre <http://localhost:4174> y ve a **Ajustes → Personas → Agregar persona**.
+2. Escribe su nombre y presiona **Conectar celular** junto a él. Elige la red **Tailscale**.
+3. La persona escanea el QR con su celular, y tú apruebas la solicitud en la PC. En su celular aparecerá su nombre junto al logo de MiPlata.
+
+Si eliminas a una persona en **Ajustes → Personas**, se borran sus gastos, boletas y documentos, y su celular pierde el acceso.
+
 ## Actualizar MiPlata
 
 Cuando haya una versión nueva, entra a la VPS y ejecuta:

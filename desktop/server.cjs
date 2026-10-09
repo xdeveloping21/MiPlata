@@ -86,6 +86,7 @@ function startServer(store, root, onPending, options = {}) {
   const pending = new Map();
   let pairToken = null;
   let pairExpires = 0;
+  let pairPerson = 'owner';
 
   const server = http.createServer(async (req, res) => {
     try {
@@ -99,6 +100,8 @@ function startServer(store, root, onPending, options = {}) {
       const cookie = (req.headers.cookie || '').split(';').map((part) => part.trim()).find((part) => part.startsWith('mg_session='));
       const device = cookie ? store.deviceForToken(cookie.slice('mg_session='.length)) : null;
       const authorized = isLocal || Boolean(device);
+      // La PC (o el túnel SSH) usa los datos del dueño; cada dispositivo, los de la persona a la que se vinculó.
+      const personId = isLocal ? 'owner' : device?.person_id || 'owner';
       const origin = req.headers.origin;
       if (req.method === 'POST' && origin && new URL(origin).host !== req.headers.host) return json(res, 403, { error: 'Origen no permitido' });
 
@@ -113,7 +116,7 @@ function startServer(store, root, onPending, options = {}) {
         const body = await readBody(req);
         if (!pairToken || Date.now() > pairExpires || body.token !== pairToken) return json(res, 410, { error: 'El QR venció. Genera otro en la PC.' });
         const requestId = crypto.randomBytes(24).toString('base64url');
-        pending.set(requestId, { name: String(body.name || 'Celular').slice(0, 80), createdAt: Date.now(), status: 'pending' });
+        pending.set(requestId, { name: String(body.name || 'Celular').slice(0, 80), personId: pairPerson, createdAt: Date.now(), status: 'pending' });
         onPending();
         return json(res, 200, { requestId });
       }
@@ -131,23 +134,24 @@ function startServer(store, root, onPending, options = {}) {
       }
 
       if (pathname.startsWith('/api/') && !authorized) return json(res, 401, { error: 'Vincula este dispositivo desde la PC' });
-      if (pathname === '/api/state' && req.method === 'GET') return json(res, 200, store.getState());
+      const own = authorized ? store.forPerson(personId) : null;
+      if (pathname === '/api/state' && req.method === 'GET') return json(res, 200, own.getState());
       if (pathname === '/api/state' && req.method === 'POST') {
         const body = await readBody(req);
-        const result = store.saveState(body.revision, body.data);
+        const result = own.saveState(body.revision, body.data);
         return json(res, result.conflict ? 409 : 200, result);
       }
       if (pathname === '/api/receipts' && req.method === 'POST') {
         if (!/^image\/(jpeg|png|webp)$/.test(String(req.headers['content-type'] || ''))) return json(res, 415, { error: 'Solo se aceptan imágenes JPG, PNG o WebP' });
         const bytes = await readRaw(req, 6_000_000);
-        try { return json(res, 200, store.saveReceipt(bytes)); } catch (error) { return json(res, 400, { error: error.message }); }
+        try { return json(res, 200, own.saveReceipt(bytes)); } catch (error) { return json(res, 400, { error: error.message }); }
       }
       if (pathname === '/api/documents' && req.method === 'POST') {
         const bytes = await readRaw(req, 15_000_000);
-        try { return json(res, 200, store.saveDocument(bytes, url.searchParams.get('name'))); } catch (error) { return json(res, 400, { error: error.message }); }
+        try { return json(res, 200, own.saveDocument(bytes, url.searchParams.get('name'))); } catch (error) { return json(res, 400, { error: error.message }); }
       }
       if (pathname.startsWith('/api/documents/') && req.method === 'GET') {
-        const document = store.readDocument(pathname.slice('/api/documents/'.length));
+        const document = own.readDocument(pathname.slice('/api/documents/'.length));
         if (!document) return json(res, 404, { error: 'Documento no encontrado' });
         // Siempre como descarga: el archivo nunca se muestra dentro de la app.
         const name = (url.searchParams.get('name') || '').replace(/[^\p{L}\p{N} ._()-]/gu, '').trim().slice(0, 120).replace(/\.[^.]*$/, '') || 'documento';
@@ -156,24 +160,38 @@ function startServer(store, root, onPending, options = {}) {
         return res.end(document.bytes);
       }
       if (pathname.startsWith('/api/receipts/') && req.method === 'GET') {
-        const receipt = store.readReceipt(pathname.slice('/api/receipts/'.length));
+        const receipt = own.readReceipt(pathname.slice('/api/receipts/'.length));
         if (!receipt) return json(res, 404, { error: 'Boleta no encontrada' });
         res.writeHead(200, { 'Content-Type': receipt.type, 'Content-Length': receipt.bytes.length, 'Cache-Control': 'private, max-age=31536000, immutable', 'Content-Security-Policy': "default-src 'none'", 'X-Content-Type-Options': 'nosniff' });
         return res.end(receipt.bytes);
       }
 
       if (pathname.startsWith('/api/') && !isLocal) return json(res, 403, { error: 'Esta acción se hace en la PC' });
-      if (pathname === '/api/desktop-info' && req.method === 'GET') return json(res, 200, { networks: networks(), devices: store.listDevices(), pending: [...pending.entries()].filter(([, item]) => item.status === 'pending' && Date.now() - item.createdAt < 300000).map(([id, item]) => ({ id, name: item.name })), backupDir: store.backupDir, lastBackup: store.lastBackupAt() });
+      if (pathname === '/api/desktop-info' && req.method === 'GET') return json(res, 200, { networks: networks(), devices: store.listDevices(), people: store.listPeople(), pending: [...pending.entries()].filter(([, item]) => item.status === 'pending' && Date.now() - item.createdAt < 300000).map(([id, item]) => ({ id, name: item.name, personId: item.personId, personName: store.personName(item.personId) })), backupDir: store.backupDir, lastBackup: store.lastBackupAt() });
+      if (pathname === '/api/people' && req.method === 'POST') {
+        const body = await readBody(req);
+        try { return json(res, 200, store.addPerson(body.name)); } catch (error) { return json(res, 400, { error: error.message }); }
+      }
+      if (pathname === '/api/people/remove' && req.method === 'POST') {
+        const body = await readBody(req);
+        try { store.removePerson(String(body.id || '')); } catch (error) { return json(res, 404, { error: error.message }); }
+        for (const [id, item] of pending) if (item.personId === body.id) pending.delete(id);
+        if (pairPerson === body.id) pairToken = null;
+        return json(res, 200, { ok: true });
+      }
       if (pathname === '/api/pair/start' && req.method === 'POST') {
         const body = await readBody(req);
         const addresses = networks();
         const host = addresses.some((item) => item.address === body.address) ? body.address : addresses[0]?.address;
         if (!host) return json(res, 503, { error: 'No hay una red Wi-Fi o Tailscale activa' });
+        const person = body.personId || 'owner';
+        if (person !== 'owner' && !store.listPeople().some((item) => item.id === person)) return json(res, 404, { error: 'Persona no encontrada' });
+        pairPerson = person;
         pairToken = crypto.randomBytes(24).toString('base64url');
         pairExpires = Date.now() + 300000;
         const pairUrl = 'http://' + host + ':' + PORT + '/pair?token=' + pairToken;
         const qr = await QRCode.toDataURL(pairUrl, { width: 250, margin: 2, color: { dark: '#262536', light: '#fdfbf7' } });
-        return json(res, 200, { address: host, url: pairUrl, qr, expires: pairExpires });
+        return json(res, 200, { address: host, url: pairUrl, qr, expires: pairExpires, personId: pairPerson });
       }
       if (pathname === '/api/pair/decision' && req.method === 'POST') {
         const body = await readBody(req);
@@ -181,7 +199,7 @@ function startServer(store, root, onPending, options = {}) {
         if (!item || item.status !== 'pending') return json(res, 404, { error: 'Solicitud vencida' });
         if (body.approve === true) {
           item.token = crypto.randomBytes(32).toString('base64url');
-          store.addDevice(item.name, item.token);
+          try { store.addDevice(item.name, item.token, item.personId); } catch (error) { pending.delete(body.id); return json(res, 404, { error: error.message }); }
           item.status = 'approved';
           pairToken = null;
         } else item.status = 'denied';
@@ -205,7 +223,7 @@ function startServer(store, root, onPending, options = {}) {
         return json(res, 200, restored);
       }
 
-      if (pathname === '/runtime.js') return res.writeHead(200, { 'Content-Type': TYPES['.js'], 'Cache-Control': 'no-store' }).end('window.MISGASTOS_LIVE=true;window.MISGASTOS_DESKTOP=' + JSON.stringify(isLocal) + ';');
+      if (pathname === '/runtime.js') return res.writeHead(200, { 'Content-Type': TYPES['.js'], 'Cache-Control': 'no-store' }).end('window.MISGASTOS_LIVE=true;window.MISGASTOS_DESKTOP=' + JSON.stringify(isLocal) + ';window.MIPLATA_PERSON=' + JSON.stringify(authorized ? store.personName(personId) : null).replace(/</g, '\\u003c') + ';');
       if (pathname === '/assets/miplata-logo.png') {
         const bytes = fs.readFileSync(path.join(root, 'assets', 'miplata-logo.png'));
         res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': bytes.length, 'Cache-Control': 'no-store' });

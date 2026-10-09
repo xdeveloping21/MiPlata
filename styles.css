@@ -153,6 +153,16 @@ button:focus-visible, input:focus-visible {
 .linked-device { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--border); padding: 13px 0; }
 .linked-device > span { display: flex; align-items: center; gap: 10px; min-width: 0; color: var(--text-soft); }
 .linked-device strong { color: var(--text); font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+.person-row { border-top: 1px solid var(--border); padding: 12px 0 2px; }
+.person-row .linked-device { padding-left: 46px; }
+.person-head { display: flex; align-items: center; gap: 11px; padding-bottom: 10px; }
+.person-head > div { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.person-head strong { color: var(--text); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.person-head small { color: var(--text-soft); font-size: 11px; }
+.person-head .text-button { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.person-avatar { display: grid; place-items: center; flex: none; width: 35px; height: 35px; border-radius: 50%; background: var(--surface-soft); color: var(--lavender-deep); font-weight: 800; }
+.person-remove { width: 34px; height: 34px; flex: none; }
+.person-chip { margin-left: 4px; padding: 3px 9px; border-radius: 999px; background: var(--surface-soft); color: var(--lavender-deep); font-size: 12px; font-weight: 700; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .network-options { display: grid; gap: 8px; margin: 15px 0; }
 .network-option { border: 1px solid var(--border); border-radius: 10px; padding: 11px 12px; background: var(--surface); color: var(--text-soft); font: 700 12px Manrope, sans-serif; text-align: left; cursor: pointer; }
 .network-option.selected { border-color: var(--lavender-deep); background: var(--lavender-wash); color: var(--text); }

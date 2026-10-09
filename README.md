@@ -23,6 +23,7 @@ MiPlata es un fork de [MisGastos](https://github.com/ValentinTarnovsky/MisGastos
 - Archivo opcional de factura o documento (PDF, Excel, Word, CSV, XML o TXT, hasta 15 MB) en cada movimiento. En la PC se abre con el programa que tengas para ese tipo de archivo.
 - Barra lateral con botón para agregar un gasto (atajo Ctrl+N), presupuesto mensual, meta de ahorro, próximos pagos fijos con aviso de vencimiento y el estado del celular vinculado y de la copia de seguridad.
 - Modo servidor para dejar MiPlata siempre activa en una VPS con Linux, accesible solo por Tailscale. Guía paso a paso en [docs/servidor.md](docs/servidor.md).
+- Personas: en **Ajustes → Personas** agregas a otras personas (familia o amigos). Cada una vincula su celular con su propio QR y ve solo sus gastos, separados de los tuyos.
 - Las imágenes y los archivos se guardan en las carpetas `receipts` y `documents` de los datos de MiPlata, en tu PC, y no se incluyen en la copia JSON exportada.
 - Si MisGastos estaba instalado, MiPlata copia sus datos en el primer inicio, sin borrar ni modificar los originales. También restaura copias JSON de MisGastos; los ahorros en ARS se leen como CLP.
 
@@ -89,7 +90,7 @@ La primera apertura muestra la ventana. En los siguientes inicios de Windows, Mi
 4. Escanea el QR con el iPhone y abre el enlace en Safari.
 5. Aprueba la solicitud que aparece en la PC. En Safari puedes usar **Compartir > Agregar a Inicio** para crear el acceso directo con el logo.
 
-El QR vence a los cinco minutos. Los celulares vinculados aparecen en **Ajustes** y se pueden revocar. El acceso móvil usa el servidor local de la PC en el puerto `4174`. No abras ese puerto a Internet; para acceder fuera de casa, usa Tailscale en ambos dispositivos. El iPhone accede mediante Safari, mientras que la aplicación instalada se ejecuta en Windows.
+El QR vence a los cinco minutos. Los celulares vinculados aparecen en **Ajustes** y se pueden revocar. Para que otra persona lleve sus propios gastos, agrégala en **Ajustes → Personas** y usa **Conectar celular** junto a su nombre: el celular que escanee ese QR solo verá los datos de esa persona. El acceso móvil usa el servidor local de la PC en el puerto `4174`. No abras ese puerto a Internet; para acceder fuera de casa, usa Tailscale en ambos dispositivos. El iPhone accede mediante Safari, mientras que la aplicación instalada se ejecuta en Windows.
 
 ## Datos y copias
 

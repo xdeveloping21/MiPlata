@@ -124,6 +124,19 @@ function validateState(state) {
   return clean;
 }
 
+const OWNER = 'owner';
+const PEOPLE_MAX = 20;
+
+function validPersonId(value) {
+  return typeof value === 'string' && /^p[A-Za-z0-9_-]{8,40}$/.test(value);
+}
+
+function cleanPersonName(value) {
+  const name = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!name || name.length > 40) throw new Error('Escribe un nombre de hasta 40 caracteres');
+  return name;
+}
+
 async function openStore(userDataPath, initialStatePath) {
   fs.mkdirSync(userDataPath, { recursive: true });
   const dbPath = path.join(userDataPath, 'miplata.sqlite');
@@ -133,11 +146,19 @@ async function openStore(userDataPath, initialStatePath) {
   fs.mkdirSync(receiptDir, { recursive: true });
   const documentDir = path.join(userDataPath, 'documents');
   fs.mkdirSync(documentDir, { recursive: true });
+  const peopleDir = path.join(userDataPath, 'people');
   const SQL = await initSqlJs({ locateFile: (file) => require.resolve('sql.js/dist/' + file) });
   let db = fs.existsSync(dbPath) ? new SQL.Database(fs.readFileSync(dbPath)) : new SQL.Database();
+  // Los datos del dueño siguen en app_state y merchant_rules, igual que en versiones anteriores.
+  // Cada persona adicional tiene su fila en person_state y sus reglas en person_rules.
   db.run('CREATE TABLE IF NOT EXISTS app_state (id INTEGER PRIMARY KEY CHECK (id = 1), revision INTEGER NOT NULL, payload TEXT NOT NULL)');
   db.run('CREATE TABLE IF NOT EXISTS devices (id TEXT PRIMARY KEY, token_hash TEXT UNIQUE NOT NULL, name TEXT NOT NULL, created_at TEXT NOT NULL)');
   db.run('CREATE TABLE IF NOT EXISTS merchant_rules (merchant_key TEXT PRIMARY KEY, merchant TEXT NOT NULL, category_id TEXT NOT NULL)');
+  db.run('CREATE TABLE IF NOT EXISTS people (id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at TEXT NOT NULL)');
+  db.run('CREATE TABLE IF NOT EXISTS person_state (person_id TEXT PRIMARY KEY, revision INTEGER NOT NULL, payload TEXT NOT NULL)');
+  db.run('CREATE TABLE IF NOT EXISTS person_rules (person_id TEXT NOT NULL, merchant_key TEXT NOT NULL, merchant TEXT NOT NULL, category_id TEXT NOT NULL, PRIMARY KEY (person_id, merchant_key))');
+  const deviceColumns = db.exec('PRAGMA table_info(devices)')[0].values.map((row) => row[1]);
+  if (!deviceColumns.includes('person_id')) db.run("ALTER TABLE devices ADD COLUMN person_id TEXT NOT NULL DEFAULT 'owner'");
 
   function persist() {
     const temporary = dbPath + '.tmp';
@@ -162,153 +183,35 @@ async function openStore(userDataPath, initialStatePath) {
     return target;
   }
 
+  function initialState() {
+    return validateState(JSON.parse(fs.readFileSync(initialStatePath, 'utf8')));
+  }
+
   const existing = db.exec('SELECT id FROM app_state WHERE id = 1');
   if (!existing.length || !existing[0].values.length) {
-    const initial = validateState(JSON.parse(fs.readFileSync(initialStatePath, 'utf8')));
-    db.run('INSERT INTO app_state (id, revision, payload) VALUES (1, 0, ?)', [JSON.stringify(initial)]);
+    db.run('INSERT INTO app_state (id, revision, payload) VALUES (1, 0, ?)', [JSON.stringify(initialState())]);
     persist();
   }
 
-  function getState() {
-    const stmt = db.prepare('SELECT revision, payload FROM app_state WHERE id = 1');
-    stmt.step();
-    const row = stmt.getAsObject();
-    stmt.free();
-    return { revision: Number(row.revision), data: JSON.parse(row.payload) };
-  }
-
-  function saveState(expectedRevision, state) {
-    const clean = validateState(state);
-    const current = getState();
-    if (expectedRevision !== current.revision) return { conflict: true, ...current };
-    backupDaily();
-    db.run('UPDATE app_state SET revision = ?, payload = ? WHERE id = 1', [current.revision + 1, JSON.stringify(clean)]);
-    persist();
-    cleanupReceipts();
-    return getState();
-  }
-
-  function restoreState(state, rules) {
-    const clean = validateState(state);
-    const restoredRules = rules === undefined ? null : validatedMerchantRules(rules, clean.categories);
-    backupNow();
-    const revision = getState().revision + 1;
-    db.run('BEGIN TRANSACTION');
-    try {
-      db.run('UPDATE app_state SET revision = ?, payload = ? WHERE id = 1', [revision, JSON.stringify(clean)]);
-      if (restoredRules) {
-        db.run('DELETE FROM merchant_rules');
-        restoredRules.forEach((rule) => db.run('INSERT OR REPLACE INTO merchant_rules VALUES (?, ?, ?)', [rule.key, rule.merchant, rule.categoryId]));
-      }
-      db.run('COMMIT');
-    } catch (error) { db.run('ROLLBACK'); throw error; }
-    persist();
-    return getState();
-  }
-
-  function saveReceipt(bytes) {
-    if (!Buffer.isBuffer(bytes) || !bytes.length || bytes.length > RECEIPT_MAX_BYTES) throw new Error('La imagen es demasiado grande');
-    const extension = receiptExtension(bytes);
-    if (!extension) throw new Error('El archivo no es una imagen JPG, PNG o WebP');
-    const id = 'r' + crypto.randomBytes(18).toString('base64url');
-    fs.writeFileSync(path.join(receiptDir, id + '.' + extension), bytes, { flag: 'wx' });
-    return { id };
-  }
-
-  function readReceipt(id) {
-    if (!validReceiptId(id)) return null;
-    for (const [extension, type] of Object.entries(RECEIPT_TYPES)) {
-      const file = path.join(receiptDir, id + '.' + extension);
-      if (fs.existsSync(file)) return { bytes: fs.readFileSync(file), type };
-    }
-    return null;
-  }
-
-  function saveDocument(bytes, originalName) {
-    const clean = cleanDocumentName(originalName);
-    if (!clean) throw new Error('Sube un PDF, Excel, Word, CSV, XML o TXT');
-    if (!Buffer.isBuffer(bytes) || !bytes.length) throw new Error('El archivo está vacío');
-    if (bytes.length > DOCUMENT_MAX_BYTES) throw new Error('El archivo supera los 15 MB');
-    if (!documentMatches(clean.extension, bytes)) throw new Error('El archivo no parece un ' + clean.extension.toUpperCase() + ' válido');
-    const id = 'd' + crypto.randomBytes(18).toString('base64url');
-    fs.writeFileSync(path.join(documentDir, id + '.' + clean.extension), bytes, { flag: 'wx' });
-    return { id, name: clean.name };
-  }
-
-  function readDocument(id) {
-    if (!validDocumentId(id)) return null;
-    for (const extension of DOCUMENT_EXTENSIONS) {
-      const file = path.join(documentDir, id + '.' + extension);
-      if (fs.existsSync(file)) return { bytes: fs.readFileSync(file), extension };
-    }
-    return null;
-  }
-
-  function cleanupReceipts() {
-    try {
-      const transactions = getState().data.transactions;
-      const used = new Set(transactions.flatMap((item) => [item.receiptId, item.documentId]).filter(Boolean));
-      for (const folder of [receiptDir, documentDir]) {
-        for (const name of fs.readdirSync(folder)) {
-          const file = path.join(folder, name);
-          if (used.has(name.replace(/\.[a-z0-9]+$/, ''))) continue;
-          if (Date.now() - fs.statSync(file).mtimeMs > RECEIPT_ORPHAN_MS) fs.unlinkSync(file);
-        }
-      }
-    } catch (error) { console.error('No se pudieron limpiar las boletas y documentos:', error); }
-  }
-
-  cleanupReceipts();
-
-  function lastBackupAt() {
-    try {
-      const times = fs.readdirSync(backupDir).filter((name) => name.endsWith('.sqlite')).map((name) => fs.statSync(path.join(backupDir, name)).mtimeMs);
-      return times.length ? new Date(Math.max(...times)).toISOString() : null;
-    } catch (error) { return null; }
-  }
-
-  function addDevice(name, token) {
-    const id = crypto.randomUUID();
-    db.run('INSERT INTO devices (id, token_hash, name, created_at) VALUES (?, ?, ?, ?)', [id, crypto.createHash('sha256').update(token).digest('hex'), String(name).slice(0, 80), new Date().toISOString()]);
-    persist();
-    return id;
-  }
-
-  function deviceForToken(token) {
-    if (typeof token !== 'string' || token.length < 32 || token.length > 200) return null;
-    const hash = crypto.createHash('sha256').update(token).digest('hex');
-    const stmt = db.prepare('SELECT id, name, created_at FROM devices WHERE token_hash = ?');
-    stmt.bind([hash]);
+  function one(sql, params) {
+    const stmt = db.prepare(sql);
+    stmt.bind(params);
     const found = stmt.step() ? stmt.getAsObject() : null;
     stmt.free();
     return found;
   }
 
-  function listDevices() {
-    const result = db.exec('SELECT id, name, created_at FROM devices ORDER BY created_at DESC');
-    return result.length ? result[0].values.map((row) => ({ id: row[0], name: row[1], createdAt: row[2] })) : [];
+  function all(sql, params) {
+    const result = db.exec(sql, params);
+    return result.length ? result[0].values : [];
   }
 
-  function revokeDevice(id) {
-    db.run('DELETE FROM devices WHERE id = ?', [id]);
-    persist();
+  function personExists(personId) {
+    return personId === OWNER || (validPersonId(personId) && Boolean(one('SELECT id FROM people WHERE id = ?', [personId])));
   }
 
   function merchantKey(name) {
-    return String(name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es-CL').replace(/[^a-z0-9]+/g, ' ').trim();
-  }
-
-  function merchantRules() {
-    const result = db.exec('SELECT merchant, category_id FROM merchant_rules ORDER BY merchant');
-    return result.length ? result[0].values.map(([merchant, categoryId]) => ({ merchant, categoryId })) : [];
-  }
-
-  function setMerchantRule(merchant, categoryId) {
-    const name = String(merchant || '').trim();
-    const key = merchantKey(name);
-    if (!key || name.length > 80 || !getState().data.categories.some((item) => item.id === categoryId && item.kind === 'expense')) throw new Error('Regla de comercio inválida');
-    db.run('INSERT OR REPLACE INTO merchant_rules (merchant_key, merchant, category_id) VALUES (?, ?, ?)', [key, name, categoryId]);
-    persist();
+    return String(name || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLocaleLowerCase('es-CL').replace(/[^a-z0-9]+/g, ' ').trim();
   }
 
   function validatedMerchantRules(rules, categories) {
@@ -321,14 +224,209 @@ async function openStore(userDataPath, initialStatePath) {
     });
   }
 
-  function replaceMerchantRules(rules) {
-    const clean = validatedMerchantRules(rules, getState().data.categories);
-    db.run('DELETE FROM merchant_rules');
-    clean.forEach((rule) => db.run('INSERT OR REPLACE INTO merchant_rules VALUES (?, ?, ?)', [rule.key, rule.merchant, rule.categoryId]));
+  // Todo lo que pertenece a una persona: sus gastos, reglas de comercio, boletas y documentos.
+  function scope(personId) {
+    if (!personExists(personId)) throw new Error('Persona no encontrada');
+    const owner = personId === OWNER;
+    const receipts = owner ? receiptDir : path.join(peopleDir, personId, 'receipts');
+    const documents = owner ? documentDir : path.join(peopleDir, personId, 'documents');
+    if (!owner) {
+      fs.mkdirSync(receipts, { recursive: true });
+      fs.mkdirSync(documents, { recursive: true });
+    }
+
+    function writeState(revision, clean) {
+      if (owner) db.run('UPDATE app_state SET revision = ?, payload = ? WHERE id = 1', [revision, JSON.stringify(clean)]);
+      else db.run('INSERT OR REPLACE INTO person_state (person_id, revision, payload) VALUES (?, ?, ?)', [personId, revision, JSON.stringify(clean)]);
+    }
+
+    function writeRules(rules) {
+      if (owner) {
+        db.run('DELETE FROM merchant_rules');
+        rules.forEach((rule) => db.run('INSERT OR REPLACE INTO merchant_rules VALUES (?, ?, ?)', [rule.key, rule.merchant, rule.categoryId]));
+      } else {
+        db.run('DELETE FROM person_rules WHERE person_id = ?', [personId]);
+        rules.forEach((rule) => db.run('INSERT OR REPLACE INTO person_rules VALUES (?, ?, ?, ?)', [personId, rule.key, rule.merchant, rule.categoryId]));
+      }
+    }
+
+    function getState() {
+      const row = owner ? one('SELECT revision, payload FROM app_state WHERE id = 1', []) : one('SELECT revision, payload FROM person_state WHERE person_id = ?', [personId]);
+      if (!row) return { revision: 0, data: initialState() };
+      return { revision: Number(row.revision), data: JSON.parse(row.payload) };
+    }
+
+    function saveState(expectedRevision, state) {
+      const clean = validateState(state);
+      const current = getState();
+      if (expectedRevision !== current.revision) return { conflict: true, ...current };
+      backupDaily();
+      writeState(current.revision + 1, clean);
+      persist();
+      cleanupReceipts();
+      return getState();
+    }
+
+    function restoreState(state, rules) {
+      const clean = validateState(state);
+      const restoredRules = rules === undefined ? null : validatedMerchantRules(rules, clean.categories);
+      backupNow();
+      const revision = getState().revision + 1;
+      db.run('BEGIN TRANSACTION');
+      try {
+        writeState(revision, clean);
+        if (restoredRules) writeRules(restoredRules);
+        db.run('COMMIT');
+      } catch (error) { db.run('ROLLBACK'); throw error; }
+      persist();
+      return getState();
+    }
+
+    function saveReceipt(bytes) {
+      if (!Buffer.isBuffer(bytes) || !bytes.length || bytes.length > RECEIPT_MAX_BYTES) throw new Error('La imagen es demasiado grande');
+      const extension = receiptExtension(bytes);
+      if (!extension) throw new Error('El archivo no es una imagen JPG, PNG o WebP');
+      const id = 'r' + crypto.randomBytes(18).toString('base64url');
+      fs.writeFileSync(path.join(receipts, id + '.' + extension), bytes, { flag: 'wx' });
+      return { id };
+    }
+
+    function readReceipt(id) {
+      if (!validReceiptId(id)) return null;
+      for (const [extension, type] of Object.entries(RECEIPT_TYPES)) {
+        const file = path.join(receipts, id + '.' + extension);
+        if (fs.existsSync(file)) return { bytes: fs.readFileSync(file), type };
+      }
+      return null;
+    }
+
+    function saveDocument(bytes, originalName) {
+      const clean = cleanDocumentName(originalName);
+      if (!clean) throw new Error('Sube un PDF, Excel, Word, CSV, XML o TXT');
+      if (!Buffer.isBuffer(bytes) || !bytes.length) throw new Error('El archivo está vacío');
+      if (bytes.length > DOCUMENT_MAX_BYTES) throw new Error('El archivo supera los 15 MB');
+      if (!documentMatches(clean.extension, bytes)) throw new Error('El archivo no parece un ' + clean.extension.toUpperCase() + ' válido');
+      const id = 'd' + crypto.randomBytes(18).toString('base64url');
+      fs.writeFileSync(path.join(documents, id + '.' + clean.extension), bytes, { flag: 'wx' });
+      return { id, name: clean.name };
+    }
+
+    function readDocument(id) {
+      if (!validDocumentId(id)) return null;
+      for (const extension of DOCUMENT_EXTENSIONS) {
+        const file = path.join(documents, id + '.' + extension);
+        if (fs.existsSync(file)) return { bytes: fs.readFileSync(file), extension };
+      }
+      return null;
+    }
+
+    function cleanupReceipts() {
+      try {
+        const transactions = getState().data.transactions;
+        const used = new Set(transactions.flatMap((item) => [item.receiptId, item.documentId]).filter(Boolean));
+        for (const folder of [receipts, documents]) {
+          for (const name of fs.readdirSync(folder)) {
+            const file = path.join(folder, name);
+            if (used.has(name.replace(/\.[a-z0-9]+$/, ''))) continue;
+            const stat = fs.statSync(file);
+            if (stat.isFile() && Date.now() - stat.mtimeMs > RECEIPT_ORPHAN_MS) fs.unlinkSync(file);
+          }
+        }
+      } catch (error) { console.error('No se pudieron limpiar las boletas y documentos:', error); }
+    }
+
+    function merchantRules() {
+      const rows = owner ? all('SELECT merchant, category_id FROM merchant_rules ORDER BY merchant') : all('SELECT merchant, category_id FROM person_rules WHERE person_id = ? ORDER BY merchant', [personId]);
+      return rows.map(([merchant, categoryId]) => ({ merchant, categoryId }));
+    }
+
+    function setMerchantRule(merchant, categoryId) {
+      const name = String(merchant || '').trim();
+      const key = merchantKey(name);
+      if (!key || name.length > 80 || !getState().data.categories.some((item) => item.id === categoryId && item.kind === 'expense')) throw new Error('Regla de comercio inválida');
+      if (owner) db.run('INSERT OR REPLACE INTO merchant_rules (merchant_key, merchant, category_id) VALUES (?, ?, ?)', [key, name, categoryId]);
+      else db.run('INSERT OR REPLACE INTO person_rules (person_id, merchant_key, merchant, category_id) VALUES (?, ?, ?, ?)', [personId, key, name, categoryId]);
+      persist();
+    }
+
+    function replaceMerchantRules(rules) {
+      writeRules(validatedMerchantRules(rules, getState().data.categories));
+      persist();
+    }
+
+    return { personId, getState, saveState, restoreState, saveReceipt, readReceipt, saveDocument, readDocument, cleanupReceipts, merchantRules, setMerchantRule, replaceMerchantRules, receiptDir: receipts, documentDir: documents };
+  }
+
+  function listPeople() {
+    return all('SELECT id, name, created_at FROM people ORDER BY created_at').map(([id, name, createdAt]) => ({ id, name, createdAt }));
+  }
+
+  function addPerson(name) {
+    const clean = cleanPersonName(name);
+    if (listPeople().length >= PEOPLE_MAX) throw new Error('Puedes tener hasta ' + PEOPLE_MAX + ' personas');
+    if (listPeople().some((person) => person.name.toLocaleLowerCase('es-CL') === clean.toLocaleLowerCase('es-CL'))) throw new Error('Ya existe una persona con ese nombre');
+    const id = 'p' + crypto.randomBytes(12).toString('base64url');
+    db.run('INSERT INTO people (id, name, created_at) VALUES (?, ?, ?)', [id, clean, new Date().toISOString()]);
+    db.run('INSERT INTO person_state (person_id, revision, payload) VALUES (?, 0, ?)', [id, JSON.stringify(initialState())]);
+    persist();
+    return { id, name: clean };
+  }
+
+  function removePerson(id) {
+    if (id === OWNER || !personExists(id)) throw new Error('Persona no encontrada');
+    backupNow();
+    db.run('BEGIN TRANSACTION');
+    try {
+      db.run('DELETE FROM devices WHERE person_id = ?', [id]);
+      db.run('DELETE FROM person_rules WHERE person_id = ?', [id]);
+      db.run('DELETE FROM person_state WHERE person_id = ?', [id]);
+      db.run('DELETE FROM people WHERE id = ?', [id]);
+      db.run('COMMIT');
+    } catch (error) { db.run('ROLLBACK'); throw error; }
+    persist();
+    fs.rmSync(path.join(peopleDir, id), { recursive: true, force: true });
+  }
+
+  function personName(id) {
+    if (id === OWNER) return null;
+    return one('SELECT name FROM people WHERE id = ?', [id])?.name || null;
+  }
+
+  const ownerScope = scope(OWNER);
+  ownerScope.cleanupReceipts();
+  listPeople().forEach((person) => scope(person.id).cleanupReceipts());
+
+  function lastBackupAt() {
+    try {
+      const times = fs.readdirSync(backupDir).filter((name) => name.endsWith('.sqlite')).map((name) => fs.statSync(path.join(backupDir, name)).mtimeMs);
+      return times.length ? new Date(Math.max(...times)).toISOString() : null;
+    } catch (error) { return null; }
+  }
+
+  function addDevice(name, token, personId = OWNER) {
+    if (!personExists(personId)) throw new Error('Persona no encontrada');
+    const id = crypto.randomUUID();
+    db.run('INSERT INTO devices (id, token_hash, name, created_at, person_id) VALUES (?, ?, ?, ?, ?)', [id, crypto.createHash('sha256').update(token).digest('hex'), String(name).slice(0, 80), new Date().toISOString(), personId]);
+    persist();
+    return id;
+  }
+
+  function deviceForToken(token) {
+    if (typeof token !== 'string' || token.length < 32 || token.length > 200) return null;
+    const hash = crypto.createHash('sha256').update(token).digest('hex');
+    return one('SELECT id, name, created_at, person_id FROM devices WHERE token_hash = ?', [hash]);
+  }
+
+  function listDevices() {
+    return all('SELECT id, name, created_at, person_id FROM devices ORDER BY created_at DESC').map((row) => ({ id: row[0], name: row[1], createdAt: row[2], personId: row[3] }));
+  }
+
+  function revokeDevice(id) {
+    db.run('DELETE FROM devices WHERE id = ?', [id]);
     persist();
   }
 
-  return { getState, saveState, restoreState, addDevice, deviceForToken, listDevices, revokeDevice, merchantRules, setMerchantRule, replaceMerchantRules, saveReceipt, readReceipt, receiptDir, saveDocument, readDocument, documentDir, lastBackupAt, backupDir, dbPath, backupNow, close: () => db.close() };
+  return { ...ownerScope, forPerson: scope, listPeople, addPerson, removePerson, personName, addDevice, deviceForToken, listDevices, revokeDevice, lastBackupAt, backupDir, dbPath, backupNow, close: () => db.close() };
 }
 
-module.exports = { openStore, validateState };
+module.exports = { openStore, validateState, OWNER };

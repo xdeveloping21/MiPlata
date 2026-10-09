@@ -75,3 +75,45 @@ test('documents keep their type and are rejected when the content does not match
     fs.rmSync(folder, { recursive: true, force: true });
   }
 });
+
+test('each person keeps separate expenses, rules, receipts and devices', async () => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'miplata-people-test-'));
+  try {
+    let store = await openStore(folder, initialState);
+    const ownerState = store.getState();
+    store.saveState(ownerState.revision, { ...ownerState.data, transactions: [{ id: 'o1', kind: 'expense', amount: 5000, title: 'Pan', categoryId: 'transport', date: '2026-10-08' }] });
+    const ana = store.addPerson('  Ana  ');
+    assert.equal(ana.name, 'Ana');
+    assert.throws(() => store.addPerson('ana'), /Ya existe/);
+    assert.throws(() => store.forPerson('pNoExiste123'), /no encontrada/);
+    const anaScope = store.forPerson(ana.id);
+    assert.equal(anaScope.getState().data.transactions.length, 0);
+    const anaSaved = anaScope.saveState(anaScope.getState().revision, { ...anaScope.getState().data, transactions: [{ id: 'a1', kind: 'expense', amount: 1200, title: 'Café', categoryId: 'transport', date: '2026-10-08' }] });
+    assert.equal(anaSaved.data.transactions[0].title, 'Café');
+    assert.equal(store.getState().data.transactions[0].title, 'Pan');
+    anaScope.setMerchantRule('Uber', 'transport');
+    assert.deepEqual(store.merchantRules(), []);
+    assert.equal(anaScope.merchantRules().length, 1);
+    const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64)]);
+    const receipt = anaScope.saveReceipt(jpeg);
+    assert.equal(store.readReceipt(receipt.id), null);
+    assert.ok(anaScope.readReceipt(receipt.id));
+    store.addDevice('iPhone', 'x'.repeat(40), ana.id);
+    store.addDevice('Mi iPhone', 'y'.repeat(40));
+    assert.equal(store.deviceForToken('x'.repeat(40)).person_id, ana.id);
+    assert.equal(store.deviceForToken('y'.repeat(40)).person_id, 'owner');
+    store.close();
+
+    store = await openStore(folder, initialState);
+    assert.equal(store.forPerson(ana.id).getState().data.transactions[0].title, 'Café');
+    store.removePerson(ana.id);
+    assert.equal(store.deviceForToken('x'.repeat(40)), null);
+    assert.ok(store.deviceForToken('y'.repeat(40)));
+    assert.equal(store.listPeople().length, 0);
+    assert.equal(fs.existsSync(path.join(folder, 'people', ana.id)), false);
+    assert.equal(store.getState().data.transactions[0].title, 'Pan');
+    store.close();
+  } finally {
+    fs.rmSync(folder, { recursive: true, force: true });
+  }
+});

@@ -3,6 +3,8 @@ const SAMPLE_MONTH = '2026-09';
 const QR_CODE = 'A7F3K9M2';
 const LIVE = Boolean(window.MISGASTOS_LIVE);
 const DESKTOP = Boolean(window.MISGASTOS_DESKTOP);
+// Nombre de la persona dueña de este celular cuando no es el dueño de la PC o del servidor.
+const PERSON_NAME = typeof window.MIPLATA_PERSON === 'string' ? window.MIPLATA_PERSON : '';
 const SAVINGS_CURRENCIES = [
   { code: 'CLP', name: 'Pesos chilenos', short: 'Pesos' },
   { code: 'USD', name: 'Dólares estadounidenses', short: 'Dólares' }
@@ -56,6 +58,7 @@ const iconPaths = {
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   phone: '<rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/>',
   calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18"/>',
+  user: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
   qr: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h2v2h-2zM20 14v3h-3M14 20h3M20 20h1"/>',
   wallet: '<path d="M20 7V5a2 2 0 0 0-2-2H5a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h15a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H5a3 3 0 0 1-3-3"/><path d="M22 12h-6a2 2 0 0 0 0 4h6"/>',
   basket: '<path d="m4 10 2 10h12l2-10zM8 10l4-7 4 7M3 10h18M9 14v3m6-3v3"/>',
@@ -155,9 +158,10 @@ let stateRevision = 0;
 let saveQueue = Promise.resolve();
 let savesPending = 0;
 let saveGeneration = 0;
-let desktopInfo = { networks: [], devices: [], pending: [], backupDir: '' };
+let desktopInfo = { networks: [], devices: [], people: [], pending: [], backupDir: '' };
 let pairingInfo = null;
 let selectedNetwork = '';
+let pairPerson = 'owner';
 let restoreCandidate = null;
 let filtersOpen = false;
 let rangeFrom = '';
@@ -517,7 +521,7 @@ function backupLabel(iso) {
 }
 
 function sideStatusMarkup() {
-  const devices = desktopInfo.devices || [];
+  const devices = ownerDevices();
   const phone = devices.length === 1 ? escapeHtml(devices[0].name || 'Celular') + ' vinculado' : devices.length ? devices.length + ' celulares vinculados' : 'Sin celular vinculado';
   return '<div class="side-status" data-side-status><button type="button" data-action="show-qr"><i class="side-dot' + (devices.length ? '' : ' off') + '"></i>' + phone + '</button>' +
     '<span><i class="side-dot' + (desktopInfo.lastBackup ? '' : ' off') + '"></i>Copia de seguridad: ' + (desktopInfo.lastBackup ? backupLabel(desktopInfo.lastBackup) : 'pendiente') + '</span></div>';
@@ -554,6 +558,20 @@ function sidebarWidgets() {
     html += '<button class="side-card side-empty" type="button" data-action="manage-recurring"><span class="side-eyebrow">PRÓXIMOS PAGOS</span><span>' + icon('plus', 15) + ' Agrega tus pagos fijos, como el arriendo</span></button>';
   }
   return html + '</div>';
+}
+
+function ownerDevices() {
+  return (desktopInfo.devices || []).filter(function (device) { return !device.personId || device.personId === 'owner'; });
+}
+
+function personById(id) {
+  return (desktopInfo.people || []).find(function (person) { return person.id === id; }) || null;
+}
+
+function personModal() {
+  return sideDialog('PERSONAS', 'Agregar persona', '<form id="person-form" novalidate><p class="savings-form-note">Tendrá sus propios gastos, categorías y ahorros, separados de los tuyos. Después vinculas su celular con un QR.</p>' +
+    '<label class="field-label" for="person-name">Nombre</label><input class="text-input" id="person-name" name="name" maxlength="40" autocomplete="off" placeholder="Ejemplo: Camila" required />' +
+    '<div class="dialog-actions"><button class="button button-outline" type="button" data-action="close-modal">Cancelar</button><button class="button button-primary" type="submit">Agregar persona</button></div></form>');
 }
 
 function sideDialog(eyebrow, title, body) {
@@ -594,11 +612,11 @@ function shell(content) {
   return (LIVE ? '' : '<div class="prototype-ribbon"><span class="prototype-dot"></span> PROTOTIPO DE DISEÑO <span class="ribbon-separator">|</span> Datos ficticios</div>') +
     '<div class="app-shell">' +
       (LIVE ? '' : '<div class="titlebar"><div class="titlebar-brand"><span class="brand-mark"><img src="assets/miplata-logo.png" alt="" width="28" height="28" style="display:block;width:28px;height:28px;max-width:28px;max-height:28px" /></span><span>MiPlata</span></div><div class="titlebar-label">Vista previa para revisar el diseño</div><div class="window-controls" aria-hidden="true"><span></span><span></span><span></span></div></div>') +
-      '<aside class="sidebar"><div class="sidebar-brand"><span class="brand-mark large"><img src="assets/miplata-logo.png" alt="" width="42" height="42" style="display:block;width:42px;height:42px;max-width:42px;max-height:42px" /></span><div><strong>MiPlata</strong><small>Tu dinero, en orden</small></div></div>' +
+      '<aside class="sidebar"><div class="sidebar-brand"><span class="brand-mark large"><img src="assets/miplata-logo.png" alt="" width="42" height="42" style="display:block;width:42px;height:42px;max-width:42px;max-height:42px" /></span><div><strong>MiPlata</strong><small>' + (PERSON_NAME ? 'Gastos de ' + escapeHtml(PERSON_NAME) : 'Tu dinero, en orden') + '</small></div></div>' +
         '<nav class="side-nav" aria-label="Principal">' +
           navItem('home', 'Inicio', 'home') + navItem('transactions', 'Movimientos', 'list') + navItem('categories', 'Categorías', 'categories') + navItem('savings', 'Ahorros', 'savings') + navItem('settings', 'Ajustes', 'settings') +
         '</nav>' + sidebarWidgets() + '<div class="sidebar-foot">' + (LIVE && DESKTOP ? sideStatusMarkup() : '<span class="demo-status"><span class="status-dot"></span> ' + (LIVE ? 'Datos guardados en tu PC' : 'Modo demostración') + '</span><small>' + (LIVE ? 'Se sincronizan con tus celulares vinculados.' : 'Los cambios solo viven en este navegador.') + '</small>') + '</div></aside>' +
-      '<div class="app-body"><div class="mobile-topbar"><div class="mobile-wordmark"><span class="brand-mark"><img src="assets/miplata-logo.png" alt="" width="29" height="29" style="display:block;width:29px;height:29px;max-width:29px;max-height:29px" /></span><strong>MiPlata</strong></div><button class="icon-button" data-action="toggle-theme" aria-label="Cambiar tema" type="button">' + icon(themeIcon, 20) + '</button></div>' +
+      '<div class="app-body"><div class="mobile-topbar"><div class="mobile-wordmark"><span class="brand-mark"><img src="assets/miplata-logo.png" alt="" width="29" height="29" style="display:block;width:29px;height:29px;max-width:29px;max-height:29px" /></span><strong>MiPlata</strong>' + (PERSON_NAME ? '<span class="person-chip">' + escapeHtml(PERSON_NAME) + '</span>' : '') + '</div><button class="icon-button" data-action="toggle-theme" aria-label="Cambiar tema" type="button">' + icon(themeIcon, 20) + '</button></div>' +
         '<main class="main-content" id="main-content">' + content + '</main></div>' +
       '<nav class="mobile-nav" aria-label="Principal">' +
         navItem('home', 'Inicio', 'home') + navItem('transactions', 'Movimientos', 'list') + navItem('categories', 'Categorías', 'categories') + navItem('savings', 'Ahorros', 'savings') + navItem('settings', 'Ajustes', 'settings') +
@@ -908,8 +926,15 @@ function renderCategoryDetail() {
 
 function renderSettings() {
   if (LIVE) {
-    const devices = desktopInfo.devices.map(function (device) {
+    const deviceRow = function (device) {
       return '<div class="linked-device"><span>' + icon('phone', 19) + '<strong>' + escapeHtml(device.name) + '</strong></span><button class="text-button" data-revoke-device="' + escapeHtml(device.id) + '" type="button">Revocar</button></div>';
+    };
+    const devices = ownerDevices().map(deviceRow).join('');
+    const people = (desktopInfo.people || []).map(function (person) {
+      const own = desktopInfo.devices.filter(function (device) { return device.personId === person.id; });
+      return '<div class="person-row"><div class="person-head"><span class="person-avatar">' + escapeHtml(person.name.slice(0, 1).toLocaleUpperCase('es-CL')) + '</span><div><strong>' + escapeHtml(person.name) + '</strong><small>' + (own.length ? own.length + (own.length === 1 ? ' celular vinculado' : ' celulares vinculados') : 'Sin celular vinculado') + '</small></div>' +
+        '<button class="text-button" data-pair-person="' + escapeHtml(person.id) + '" type="button">' + icon('qr', 16) + ' Conectar celular</button><button class="icon-button person-remove" data-remove-person="' + escapeHtml(person.id) + '" type="button" aria-label="Eliminar a ' + escapeHtml(person.name) + '">' + icon('trash', 17) + '</button></div>' +
+        own.map(deviceRow).join('') + '</div>';
     }).join('');
     return pageHeader('PREFERENCIAS', 'Ajustes', 'Tu dinero y tus dispositivos, bajo tu control.', '') +
       '<div class="settings-grid"><section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('sun', 20) + '</span><div><h2>Apariencia</h2><p>Elige cómo quieres ver MiPlata.</p></div></div>' +
@@ -921,7 +946,10 @@ function renderSettings() {
       (DESKTOP ? '<section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('download', 20) + '</span><div><h2>Copias de seguridad</h2><p>Se guarda una copia local diaria cuando cambias datos.</p></div></div>' +
         '<button class="setting-action" data-action="export-data" type="button"><span>' + icon('download', 18) + ' Exportar mis datos</span>' + icon('arrowRight', 18) + '</button>' +
         '<button class="setting-action" data-action="restore-data" type="button"><span>' + icon('reset', 18) + ' Restaurar una copia</span>' + icon('arrowRight', 18) + '</button><input id="restore-file" type="file" accept=".json,application/json" hidden />' +
-        '<p class="settings-note">Copias automáticas en ' + escapeHtml(desktopInfo.backupDir || 'la carpeta de datos de MiPlata') + '</p></section>' : '') + '</div>';
+        '<p class="settings-note">Copias automáticas en ' + escapeHtml(desktopInfo.backupDir || 'la carpeta de datos de MiPlata') + '</p></section>' +
+      '<section class="panel settings-panel people-panel"><div class="settings-heading"><span class="settings-icon">' + icon('user', 20) + '</span><div><h2>Personas</h2><p>Cada persona ve solo sus propios gastos desde su celular.</p></div></div>' +
+        (people || '<p class="settings-note">Agrega a alguien de tu familia o a un amigo para que lleve sus gastos aquí, sin ver los tuyos.</p>') +
+        '<button class="setting-action" data-action="add-person" type="button"><span>' + icon('plus', 18) + ' Agregar persona</span>' + icon('arrowRight', 18) + '</button></section>' : '') + '</div>';
   }
   return pageHeader('PREFERENCIAS', 'Ajustes', 'Personaliza esta vista previa y prueba el enlace con tu iPhone.', '') +
     '<div class="settings-grid"><section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('sun', 20) + '</span><div><h2>Apariencia</h2><p>Elige cómo quieres ver MiPlata.</p></div></div>' +
@@ -1194,11 +1222,12 @@ function categoryModal() {
 function qrModal() {
   if (LIVE) {
     const request = desktopInfo.pending[0];
+    const person = pairPerson === 'owner' ? null : personById(pairPerson);
     const networks = desktopInfo.networks.map(function (option) { return '<button class="network-option' + (selectedNetwork === option.address ? ' selected' : '') + '" data-pair-address="' + escapeHtml(option.address) + '" type="button">' + escapeHtml(option.label) + '</button>'; }).join('');
     return '<div class="modal-backdrop" data-action="close-modal"></div><div class="dialog qr-dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">' +
-      '<div class="dialog-head"><div><p class="eyebrow">ACCESO MÓVIL</p><h2 id="dialog-title">Conectar iPhone</h2></div><button class="icon-button" data-action="close-modal" type="button" aria-label="Cerrar">' + icon('close', 20) + '</button></div>' +
-      (request ? '<div class="approval-icon">' + icon('phone', 30) + '</div><p class="qr-intro"><strong>' + escapeHtml(request.name) + '</strong> solicita acceso a tus gastos. Permite el acceso solo si es tu celular.</p><div class="approval-actions"><button class="button button-outline" data-pair-decision="deny" data-request-id="' + escapeHtml(request.id) + '" type="button">Rechazar</button><button class="button button-primary" data-pair-decision="approve" data-request-id="' + escapeHtml(request.id) + '" type="button">Permitir acceso</button></div>' :
-      '<p class="qr-intro">Elige la conexión, escanea el QR con Safari y aprueba la solicitud en esta PC.</p><div class="network-options">' + (networks || '<p>Conecta la PC a Wi-Fi o Tailscale para generar el QR.</p>') + '</div>' +
+      '<div class="dialog-head"><div><p class="eyebrow">ACCESO MÓVIL</p><h2 id="dialog-title">' + (request ? 'Solicitud de acceso' : person ? 'Conectar celular de ' + escapeHtml(person.name) : 'Conectar iPhone') + '</h2></div><button class="icon-button" data-action="close-modal" type="button" aria-label="Cerrar">' + icon('close', 20) + '</button></div>' +
+      (request ? '<div class="approval-icon">' + icon('phone', 30) + '</div><p class="qr-intro">' + (request.personName ? '<strong>' + escapeHtml(request.name) + '</strong> solicita acceso a los gastos de <strong>' + escapeHtml(request.personName) + '</strong>. Permite el acceso solo si es el celular de esa persona.' : '<strong>' + escapeHtml(request.name) + '</strong> solicita acceso a tus gastos. Permite el acceso solo si es tu celular.') + '</p><div class="approval-actions"><button class="button button-outline" data-pair-decision="deny" data-request-id="' + escapeHtml(request.id) + '" type="button">Rechazar</button><button class="button button-primary" data-pair-decision="approve" data-request-id="' + escapeHtml(request.id) + '" type="button">Permitir acceso</button></div>' :
+      '<p class="qr-intro">' + (person ? 'Pídele a ' + escapeHtml(person.name) + ' que escanee este QR con su celular. Verá solo sus propios gastos.' : 'Elige la conexión, escanea el QR con Safari y aprueba la solicitud en esta PC.') + '</p><div class="network-options">' + (networks || '<p>Conecta la PC a Wi-Fi o Tailscale para generar el QR.</p>') + '</div>' +
       (pairingInfo ? '<div class="qr-wrap"><img class="real-qr" src="' + pairingInfo.qr + '" alt="QR para vincular el iPhone" /></div><p class="pair-url">' + escapeHtml(pairingInfo.url) + '</p><p class="qr-disclaimer">Este QR vence en 5 minutos. Fuera de casa, usa Tailscale en la PC y el iPhone.</p>' : '<p class="qr-disclaimer">Preparando QR...</p>')) + '</div>';
   }
   const pending = pairingStep === 'desktop-pending';
@@ -1215,14 +1244,16 @@ function confirmationModal() {
   const item = modal.action === 'delete-transaction' ? data.transactions.find(function (entry) { return entry.id === modal.id; }) : null;
   const category = modal.action === 'delete-category' ? categoryById(modal.id) : null;
   const device = modal.action === 'revoke-device' ? desktopInfo.devices.find(function (entry) { return entry.id === modal.id; }) : null;
-  const title = modal.action === 'reset' ? 'Restaurar el ejemplo' : modal.action === 'restore' ? 'Restaurar copia' : device ? 'Revocar dispositivo' : item ? 'Eliminar movimiento' : 'Eliminar categoría';
-  const description = modal.action === 'reset'
+  const person = modal.action === 'remove-person' ? personById(modal.id) : null;
+  const title = person ? 'Eliminar persona' : modal.action === 'reset' ? 'Restaurar el ejemplo' : modal.action === 'restore' ? 'Restaurar copia' : device ? 'Revocar dispositivo' : item ? 'Eliminar movimiento' : 'Eliminar categoría';
+  const description = person ? 'Se borrarán todos los gastos, boletas y documentos de "' + escapeHtml(person.name) + '", y sus celulares perderán el acceso. Esto no se puede deshacer.'
+    : modal.action === 'reset'
     ? 'Se descartarán los cambios que hiciste en esta demostración y volverán los datos originales.'
     : modal.action === 'restore' ? 'Se reemplazarán los datos actuales por los de la copia elegida. Antes se guardará una copia automática de seguridad.'
     : device ? '¿Quieres quitar el acceso de "' + escapeHtml(device.name) + '"? Tendrás que vincularlo otra vez por QR.'
     : item ? '¿Quieres eliminar "' + escapeHtml(item.title) + '"? Este movimiento dejará de aparecer en el saldo y los gráficos.'
     : '¿Quieres eliminar la categoría "' + escapeHtml(category ? category.name : '') + '"?';
-  const actionLabel = modal.action === 'reset' ? 'Restaurar ejemplo' : modal.action === 'restore' ? 'Restaurar copia' : device ? 'Revocar acceso' : 'Eliminar';
+  const actionLabel = person ? 'Eliminar persona' : modal.action === 'reset' ? 'Restaurar ejemplo' : modal.action === 'restore' ? 'Restaurar copia' : device ? 'Revocar acceso' : 'Eliminar';
   return '<div class="modal-backdrop" data-action="cancel-confirm"></div><div class="dialog confirmation-dialog" role="alertdialog" aria-modal="true" aria-labelledby="dialog-title" aria-describedby="confirm-description">' +
     '<div class="dialog-head"><div><p class="eyebrow">CONFIRMACIÓN</p><h2 id="dialog-title">' + title + '</h2></div><button class="icon-button" data-action="cancel-confirm" type="button" aria-label="Cerrar">' + icon('close', 20) + '</button></div>' +
     '<p class="confirm-description" id="confirm-description">' + description + '</p><div class="dialog-actions confirm-actions"><button class="button button-outline" data-action="cancel-confirm" type="button">Cancelar</button><button class="button button-danger" data-action="confirm-action" type="button">' + actionLabel + '</button></div></div>';
@@ -1271,6 +1302,7 @@ function renderModal() {
   if (modal.type === 'balance') return '<div class="modal-backdrop" data-action="close-modal"></div><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title"><div class="dialog-head"><div><p class="eyebrow">TUS DATOS</p><h2 id="dialog-title">Saldo inicial</h2></div><button class="icon-button" data-action="close-modal" type="button" aria-label="Cerrar">' + icon('close', 20) + '</button></div><form id="balance-form"><p class="savings-form-note">El saldo actual suma tus movimientos a este importe.</p><label class="field-label" for="opening-balance">Saldo inicial en pesos</label><div class="amount-input"><span>$</span><input id="opening-balance" name="balance" type="text" inputmode="numeric" autocomplete="off" data-amount-input data-amount-negative value="' + formatAmountValue(data.openingBalance) + '" required /></div><div class="dialog-actions"><button class="button button-outline" type="button" data-action="close-modal">Cancelar</button><button class="button button-primary" type="submit">Guardar saldo</button></div></form></div>';
   if (modal.type === 'confirmation') return confirmationModal();
   if (modal.type === 'budget') return budgetModal();
+  if (modal.type === 'person') return personModal();
   if (modal.type === 'goal') return goalModal();
   if (modal.type === 'recurring') return recurringModal();
   return '';
@@ -1562,10 +1594,18 @@ document.addEventListener('click', function (event) {
   if (decision && LIVE && DESKTOP) {
     apiPost('/api/pair/decision', { id: decision.dataset.requestId, approve: decision.dataset.pairDecision === 'approve' })
       .then(function () { return refreshDesktopInfo(false); })
-      .then(function () { toast(decision.dataset.pairDecision === 'approve' ? 'Celular vinculado' : 'Solicitud rechazada'); })
+      .then(function () {
+        // El QR ya no sirve después de aprobar: se cierra la ventana si no queda otra solicitud.
+        if (decision.dataset.pairDecision === 'approve' && modal && modal.type === 'qr' && !desktopInfo.pending.length) { modal = null; pairingInfo = null; render(); }
+        toast(decision.dataset.pairDecision === 'approve' ? 'Celular vinculado' : 'Solicitud rechazada');
+      })
       .catch(function (error) { toast(error.message); });
     return;
   }
+  const pairFor = event.target.closest('[data-pair-person]');
+  if (pairFor && LIVE && DESKTOP) { pairPerson = pairFor.dataset.pairPerson; modal = { type: 'qr' }; pairingInfo = null; render(); startPairing(selectedNetwork); return; }
+  const removePerson = event.target.closest('[data-remove-person]');
+  if (removePerson && LIVE && DESKTOP) { modal = { type: 'confirmation', action: 'remove-person', id: removePerson.dataset.removePerson }; render(); return; }
   const revoke = event.target.closest('[data-revoke-device]');
   if (revoke && LIVE && DESKTOP) { modal = { type: 'confirmation', action: 'revoke-device', id: revoke.dataset.revokeDevice }; render(); return; }
   const modalKind = event.target.closest('[data-modal-kind]');
@@ -1597,8 +1637,9 @@ document.addEventListener('click', function (event) {
     case 'move-savings-category': if (modal && modal.id) openTransaction(null, modal.id); break;
     case 'add-category': modal = { type: 'category', id: null }; render(); break;
     case 'merge-concepts': modal = { type: 'merge-concepts', categoryId: selectedCategoryId }; render(); break;
+    case 'add-person': if (LIVE && DESKTOP) { modal = { type: 'person' }; render(); document.getElementById('person-name')?.focus(); } break;
     case 'show-qr':
-      modal = { type: 'qr' }; pairingInfo = null; pairingStep = 'start'; render();
+      pairPerson = 'owner'; modal = { type: 'qr' }; pairingInfo = null; pairingStep = 'start'; render();
       if (LIVE && DESKTOP) refreshDesktopInfo(false).then(function () { startPairing(selectedNetwork); });
       break;
     case 'edit-opening-balance': modal = { type: 'balance' }; render(); break;
@@ -1643,6 +1684,10 @@ document.addEventListener('click', function (event) {
         const candidate = restoreCandidate;
         modal = null; restoreCandidate = null; render();
         saveQueue.then(function () { return apiPost('/api/restore', candidate); }).then(function (result) { stateRevision = result.revision; data = result.data; render(); toast('Copia restaurada'); }).catch(function (error) { toast(error.message); });
+      } else if (modal.action === 'remove-person' && LIVE && DESKTOP) {
+        const id = modal.id;
+        modal = null; render();
+        apiPost('/api/people/remove', { id }).then(function () { return refreshDesktopInfo(false); }).then(function () { render(); toast('Persona eliminada'); }).catch(function (error) { toast(error.message); });
       } else if (modal.action === 'revoke-device' && LIVE && DESKTOP) {
         const id = modal.id;
         modal = null; render();
@@ -1778,6 +1823,11 @@ document.addEventListener('submit', function (event) {
     });
     if (conceptFilter === source) conceptFilter = target;
     modal = null; saveData(); render(); toast('Nombres unidos');
+  } else if (event.target.id === 'person-form') {
+    event.preventDefault();
+    const name = String(new FormData(event.target).get('name') || '').trim();
+    if (!name) { toast('Escribe un nombre'); return; }
+    apiPost('/api/people', { name: name }).then(function () { modal = null; return refreshDesktopInfo(false); }).then(function () { render(); toast('Persona agregada'); }).catch(function (error) { toast(error.message); });
   } else if (event.target.id === 'budget-form') {
     event.preventDefault();
     const budget = parseAmountText(new FormData(event.target).get('budget'));
@@ -2039,7 +2089,7 @@ async function refreshDesktopInfo(openApproval) {
 async function startPairing(address) {
   if (!LIVE || !DESKTOP) return;
   try {
-    const result = await apiPost('/api/pair/start', { address: address || selectedNetwork });
+    const result = await apiPost('/api/pair/start', { address: address || selectedNetwork, personId: pairPerson });
     selectedNetwork = result.address;
     pairingInfo = result;
     render();
@@ -2083,6 +2133,6 @@ async function initializeLive() {
   }
 }
 
-window.MISGASTOS_OPEN_QR = function () { if (!LIVE || !DESKTOP) return; modal = { type: 'qr' }; pairingInfo = null; render(); refreshDesktopInfo(false).then(function () { startPairing(selectedNetwork); }); };
+window.MISGASTOS_OPEN_QR = function () { if (!LIVE || !DESKTOP) return; pairPerson = 'owner'; modal = { type: 'qr' }; pairingInfo = null; render(); refreshDesktopInfo(false).then(function () { startPairing(selectedNetwork); }); };
 window.MISGASTOS_PENDING = function () { refreshDesktopInfo(true); };
 if (LIVE) initializeLive(); else render();
