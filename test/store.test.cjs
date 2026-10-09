@@ -117,3 +117,35 @@ test('each person keeps separate expenses, rules, receipts and devices', async (
     fs.rmSync(folder, { recursive: true, force: true });
   }
 });
+
+test('accounts are created once with an invitation and passwords are not stored in clear', async () => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'miplata-account-test-'));
+  try {
+    const store = await openStore(folder, initialState);
+    const ana = store.addPerson('Ana');
+    const { code } = store.createInvite(ana.id);
+    assert.match(code, /^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+    assert.throws(() => store.registerAccount('AAAA-BBBB', 'ana', 'secreta123'), /no es válido/);
+    assert.throws(() => store.registerAccount(code, 'a', 'secreta123'), /usuario/);
+    assert.throws(() => store.registerAccount(code, 'ana', 'corta'), /8 caracteres/);
+    assert.equal(store.registerAccount(code.toLowerCase().replace('-', ' '), 'Ana.Perez', 'secreta123'), ana.id);
+    assert.throws(() => store.registerAccount(code, 'otra', 'secreta123'), /no es válido/);
+    assert.equal(store.verifyLogin('ana.perez', 'secreta123'), ana.id);
+    assert.equal(store.verifyLogin('ana.perez', 'mala-clave'), null);
+    assert.equal(store.verifyLogin('nadie', 'secreta123'), null);
+    assert.equal(store.listPeople()[0].username, 'ana.perez');
+    const ownerInvite = store.createInvite('owner');
+    assert.throws(() => store.registerAccount(ownerInvite.code, 'ana.perez', 'secreta123'), /ya existe/);
+    assert.equal(store.registerAccount(ownerInvite.code, 'raul', 'clave-del-dueno'), 'owner');
+    assert.throws(() => store.createInvite(ana.id), /ya tiene usuario/);
+    store.setPassword(ana.id, 'nueva-clave-1');
+    assert.equal(store.verifyLogin('ana.perez', 'secreta123'), null);
+    assert.equal(store.verifyLogin('ana.perez', 'nueva-clave-1'), ana.id);
+    store.close();
+    const raw = fs.readFileSync(path.join(folder, 'miplata.sqlite'));
+    assert.equal(raw.includes('nueva-clave-1'), false);
+    assert.equal(raw.includes('clave-del-dueno'), false);
+  } finally {
+    fs.rmSync(folder, { recursive: true, force: true });
+  }
+});

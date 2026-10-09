@@ -54,9 +54,52 @@ function pairPage(token, expires) {
   </script></body></html>`;
 }
 
-function unauthorizedPage() {
-  return '<!doctype html><html lang="es"><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8"><title>MiPlata</title><body style="font-family:system-ui;background:#f7faf8;color:#13221b;padding:32px"><h1>Vincula este celular</h1><p>En la PC abre MiPlata, toca Conectar iPhone y escanea el QR nuevo.</p></body></html>';
+// Pantalla para entrar con usuario y contraseña, o crear la cuenta con un código de invitación.
+function loginPage() {
+  return `<!doctype html><html lang="es"><head><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta charset="utf-8"><meta name="apple-mobile-web-app-capable" content="yes"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><title>MiPlata</title><style>
+  :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#13221b;background:#f7faf8}*{box-sizing:border-box}body{margin:0;min-height:100dvh;display:grid;place-items:center;padding:24px}.card{width:min(100%,400px);padding:28px;border:1px solid #e2ece6;border-radius:22px;background:#fff;box-shadow:0 18px 60px #10302212}.brand{display:flex;align-items:center;gap:12px;font-weight:800;font-size:22px;letter-spacing:-.03em}.brand img{width:44px;height:44px}h1{font-size:24px;margin:24px 0 6px;letter-spacing:-.03em}p{color:#5c6d64;line-height:1.5;margin:0 0 18px;font-size:15px}label{display:block;font-size:13px;font-weight:700;margin:14px 0 6px}input{width:100%;font:inherit;font-size:16px;padding:12px 13px;border:1px solid #d5e3db;border-radius:11px;background:#fff;color:inherit}input:focus{outline:2px solid #1fa77455;border-color:#1fa774}.code{text-transform:uppercase;letter-spacing:.12em}button{width:100%;margin-top:20px;background:#1fa774;color:#fff;border:0;border-radius:11px;padding:14px;font:inherit;font-weight:800;cursor:pointer}button:disabled{opacity:.6}.switch{display:block;margin-top:16px;background:none;color:#138a5e;padding:6px;font-weight:700;width:100%;border:0;font:inherit;font-size:14px;cursor:pointer}.error{margin-top:14px;padding:11px 13px;border-radius:10px;background:#fdecec;color:#b42318;font-size:14px}.note{margin-top:14px;font-size:12px;color:#7a8a81}[hidden]{display:none!important}
+  @media (prefers-color-scheme:dark){:root{background:#0f1814;color:#e8f2ec}.card{background:#14211b;border-color:#22352c}p,.note{color:#9db3a7}input{background:#0f1814;border-color:#2a4136}.switch{color:#4fe0a6}button{color:#0c1512;background:#4fe0a6}.error{background:#3a1717;color:#ffb4ab}}
+  </style></head><body><main class="card"><div class="brand"><img src="/assets/miplata-logo.png" alt="">MiPlata</div>
+  <form id="login" novalidate><h1>Iniciar sesión</h1><p>Entra una vez y este dispositivo quedará guardado como de confianza.</p>
+  <label for="l-user">Usuario</label><input id="l-user" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+  <label for="l-pass">Contraseña</label><input id="l-pass" type="password" autocomplete="current-password" required>
+  <div class="error" hidden></div><button type="submit">Entrar</button><button class="switch" type="button" data-show="register">¿Tienes un código de invitación? Crea tu cuenta</button></form>
+  <form id="register" novalidate hidden><h1>Crear cuenta</h1><p>Usa el código de invitación que te dieron. Lo haces una sola vez.</p>
+  <label for="r-code">Código de invitación</label><input id="r-code" class="code" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" placeholder="ABCD-1234" required>
+  <label for="r-user">Elige un usuario</label><input id="r-user" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+  <label for="r-pass">Contraseña (mínimo 8 caracteres)</label><input id="r-pass" type="password" autocomplete="new-password" required>
+  <label for="r-pass2">Repite la contraseña</label><input id="r-pass2" type="password" autocomplete="new-password" required>
+  <div class="error" hidden></div><button type="submit">Crear cuenta y entrar</button><button class="switch" type="button" data-show="login">Ya tengo cuenta</button></form>
+  <p class="note">¿Olvidaste tu contraseña? Pídele al dueño de MiPlata que la cambie.</p></main><script>
+  const forms={login:document.getElementById('login'),register:document.getElementById('register')};
+  document.querySelectorAll('[data-show]').forEach((button)=>button.onclick=()=>{for(const [name,form] of Object.entries(forms))form.hidden=name!==button.dataset.show;forms[button.dataset.show].querySelector('input').focus()});
+  async function send(form,url,body){const error=form.querySelector('.error');const submit=form.querySelector('button[type=submit]');error.hidden=true;submit.disabled=true;try{const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign(body,{device:/iPhone/i.test(navigator.userAgent)?'iPhone':/iPad/i.test(navigator.userAgent)?'iPad':/Android/i.test(navigator.userAgent)?'Android':/Mac/i.test(navigator.userAgent)?'Mac':/Windows/i.test(navigator.userAgent)?'PC con Windows':'Navegador'}))});const result=await response.json().catch(()=>({}));if(!response.ok)throw new Error(result.error||'No se pudo completar');location.replace('/')}catch(problem){error.textContent=problem.message;error.hidden=false;submit.disabled=false}}
+  forms.login.onsubmit=(event)=>{event.preventDefault();send(forms.login,'/api/login',{username:document.getElementById('l-user').value,password:document.getElementById('l-pass').value})};
+  forms.register.onsubmit=(event)=>{event.preventDefault();const pass=document.getElementById('r-pass').value;if(pass!==document.getElementById('r-pass2').value){const error=forms.register.querySelector('.error');error.textContent='Las contraseñas no coinciden';error.hidden=false;return}send(forms.register,'/api/register',{code:document.getElementById('r-code').value,username:document.getElementById('r-user').value,password:pass})};
+  document.getElementById('l-user').focus();
+  </script></body></html>`;
 }
+
+// Bloquea por 15 minutos después de 5 intentos fallidos, por dirección y por usuario.
+function attemptLimiter() {
+  const failures = new Map();
+  const LIMIT = 5;
+  const LOCK_MS = 15 * 60 * 1000;
+  const locked = (keys) => keys.some((key) => { const entry = failures.get(key); return entry && entry.count >= LIMIT && Date.now() < entry.until; });
+  return {
+    locked,
+    fail(keys) {
+      for (const key of keys) {
+        const entry = failures.get(key);
+        const fresh = !entry || Date.now() > entry.until;
+        failures.set(key, { count: fresh ? 1 : entry.count + 1, until: Date.now() + LOCK_MS });
+      }
+    },
+    clear(keys) { keys.forEach((key) => failures.delete(key)); },
+  };
+}
+
+const DEVICE_NAMES = ['iPhone', 'iPad', 'Android', 'Mac', 'PC con Windows', 'Navegador'];
 
 async function readBody(req) {
   const chunks = [];
@@ -87,6 +130,14 @@ function startServer(store, root, onPending, options = {}) {
   let pairToken = null;
   let pairExpires = 0;
   let pairPerson = 'owner';
+  const limiter = attemptLimiter();
+
+  function startSession(res, personId, deviceName) {
+    const token = crypto.randomBytes(32).toString('base64url');
+    store.addDevice(DEVICE_NAMES.includes(deviceName) ? deviceName : 'Navegador', token, personId);
+    // Dispositivo de confianza: la sesión dura un año o hasta que se revoque desde la PC.
+    return json(res, 200, { ok: true }, { 'Set-Cookie': 'mg_session=' + token + '; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000' });
+  }
 
   const server = http.createServer(async (req, res) => {
     try {
@@ -133,7 +184,28 @@ function startServer(store, root, onPending, options = {}) {
         return json(res, 200, { status: item.status });
       }
 
-      if (pathname.startsWith('/api/') && !authorized) return json(res, 401, { error: 'Vincula este dispositivo desde la PC' });
+      if ((pathname === '/api/login' || pathname === '/api/register') && req.method === 'POST') {
+        const body = await readBody(req);
+        const address = String(req.socket.remoteAddress || '');
+        const keys = ['ip:' + address, 'user:' + String(body.username || '').trim().toLowerCase()];
+        if (limiter.locked(keys)) return json(res, 429, { error: 'Demasiados intentos. Espera 15 minutos y vuelve a intentarlo.' });
+        if (pathname === '/api/login') {
+          const personId = store.verifyLogin(body.username, body.password);
+          if (!personId) { limiter.fail(keys); return json(res, 401, { error: 'Usuario o contraseña incorrectos' }); }
+          limiter.clear(keys);
+          return startSession(res, personId, body.device);
+        }
+        let personId;
+        try { personId = store.registerAccount(body.code, body.username, body.password); } catch (error) { limiter.fail(keys.slice(0, 1)); return json(res, 400, { error: error.message }); }
+        limiter.clear(keys);
+        return startSession(res, personId, body.device);
+      }
+
+      if (pathname.startsWith('/api/') && !authorized) return json(res, 401, { error: 'Inicia sesión para continuar' });
+      if (pathname === '/api/logout' && req.method === 'POST') {
+        if (device) store.revokeDevice(device.id);
+        return json(res, 200, { ok: true }, { 'Set-Cookie': 'mg_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0' });
+      }
       const own = authorized ? store.forPerson(personId) : null;
       if (pathname === '/api/state' && req.method === 'GET') return json(res, 200, own.getState());
       if (pathname === '/api/state' && req.method === 'POST') {
@@ -167,7 +239,16 @@ function startServer(store, root, onPending, options = {}) {
       }
 
       if (pathname.startsWith('/api/') && !isLocal) return json(res, 403, { error: 'Esta acción se hace en la PC' });
-      if (pathname === '/api/desktop-info' && req.method === 'GET') return json(res, 200, { networks: networks(), devices: store.listDevices(), people: store.listPeople(), pending: [...pending.entries()].filter(([, item]) => item.status === 'pending' && Date.now() - item.createdAt < 300000).map(([id, item]) => ({ id, name: item.name, personId: item.personId, personName: store.personName(item.personId) })), backupDir: store.backupDir, lastBackup: store.lastBackupAt() });
+      if (pathname === '/api/desktop-info' && req.method === 'GET') return json(res, 200, { networks: networks(), devices: store.listDevices(), people: store.listPeople(), ownerAccount: store.accountFor('owner')?.username || null, pending: [...pending.entries()].filter(([, item]) => item.status === 'pending' && Date.now() - item.createdAt < 300000).map(([id, item]) => ({ id, name: item.name, personId: item.personId, personName: store.personName(item.personId) })), backupDir: store.backupDir, lastBackup: store.lastBackupAt() });
+      if (pathname === '/api/invites' && req.method === 'POST') {
+        const body = await readBody(req);
+        try { return json(res, 200, store.createInvite(String(body.personId || ''))); } catch (error) { return json(res, 400, { error: error.message }); }
+      }
+      if (pathname === '/api/people/password' && req.method === 'POST') {
+        const body = await readBody(req);
+        try { store.setPassword(String(body.personId || ''), body.password); } catch (error) { return json(res, 400, { error: error.message }); }
+        return json(res, 200, { ok: true });
+      }
       if (pathname === '/api/people' && req.method === 'POST') {
         const body = await readBody(req);
         try { return json(res, 200, store.addPerson(body.name)); } catch (error) { return json(res, 400, { error: error.message }); }
@@ -235,7 +316,7 @@ function startServer(store, root, onPending, options = {}) {
         res.writeHead(200, { 'Content-Type': TYPES[path.extname(file)], 'Content-Length': bytes.length, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
         return res.end(bytes);
       }
-      if (!authorized) return html(res, 401, unauthorizedPage());
+      if (!authorized) return html(res, 401, loginPage());
       const files = { '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/category-icons.js': 'category-icons.js', '/styles.css': 'styles.css', '/assets/miplata-logo.png': 'assets/miplata-logo.png', '/assets/miplata-logo-v2.png': 'assets/miplata-logo-v2.png' };
       const file = files[pathname];
       if (!file) return json(res, 404, { error: 'No encontrado' });

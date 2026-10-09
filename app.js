@@ -574,6 +574,28 @@ function personModal() {
     '<div class="dialog-actions"><button class="button button-outline" type="button" data-action="close-modal">Cancelar</button><button class="button button-primary" type="submit">Agregar persona</button></div></form>');
 }
 
+function serverAddress() {
+  const networks = desktopInfo.networks || [];
+  const chosen = networks.find(function (item) { return item.label.indexOf('Tailscale') === 0; }) || networks[0];
+  return chosen ? 'http://' + chosen.address + ':4174' : 'la dirección de MiPlata';
+}
+
+function inviteModal() {
+  const days = Math.max(1, Math.round((modal.expiresAt - Date.now()) / 86400000));
+  return sideDialog('INVITACIÓN', modal.personId === 'owner' ? 'Tu código de invitación' : 'Código para ' + escapeHtml(modal.personName), '<div class="invite-code">' + escapeHtml(modal.code) + '</div>' +
+    '<p class="savings-form-note">Sirve una sola vez y vence en ' + days + (days === 1 ? ' día' : ' días') + '. Compártelo solo con ' + (modal.personId === 'owner' ? 'tus dispositivos' : escapeHtml(modal.personName)) + '.</p>' +
+    '<ol class="invite-steps"><li>Abrir <strong>' + escapeHtml(serverAddress()) + '</strong> en el celular, con Tailscale conectado.</li><li>Tocar <strong>¿Tienes un código de invitación?</strong></li><li>Escribir este código y elegir usuario y contraseña.</li></ol>' +
+    '<div class="dialog-actions"><button class="button button-outline" type="button" data-action="copy-invite">Copiar código</button><button class="button button-primary" type="button" data-action="close-modal">Listo</button></div>');
+}
+
+function passwordModal() {
+  const person = modal.personId === 'owner' ? { name: 'ti' } : personById(modal.personId);
+  return sideDialog('CUENTA', 'Nueva contraseña', '<form id="password-form" novalidate><p class="savings-form-note">Escribe la nueva contraseña para ' + escapeHtml(person ? person.name : '') + '. Los dispositivos que ya tienen la sesión iniciada seguirán conectados; puedes revocarlos aquí mismo.</p>' +
+    '<label class="field-label" for="new-password">Nueva contraseña (mínimo 8 caracteres)</label><input class="text-input" id="new-password" name="password" type="password" autocomplete="new-password" required />' +
+    '<label class="field-label" for="new-password-2">Repítela</label><input class="text-input" id="new-password-2" name="password2" type="password" autocomplete="new-password" required />' +
+    '<div class="dialog-actions"><button class="button button-outline" type="button" data-action="close-modal">Cancelar</button><button class="button button-primary" type="submit">Guardar contraseña</button></div></form>');
+}
+
 function sideDialog(eyebrow, title, body) {
   return '<div class="modal-backdrop" data-action="close-modal"></div><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title"><div class="dialog-head"><div><p class="eyebrow">' + eyebrow + '</p><h2 id="dialog-title">' + title + '</h2></div><button class="icon-button" data-action="close-modal" type="button" aria-label="Cerrar">' + icon('close', 20) + '</button></div>' + body + '</div>';
 }
@@ -930,10 +952,19 @@ function renderSettings() {
       return '<div class="linked-device"><span>' + icon('phone', 19) + '<strong>' + escapeHtml(device.name) + '</strong></span><button class="text-button" data-revoke-device="' + escapeHtml(device.id) + '" type="button">Revocar</button></div>';
     };
     const devices = ownerDevices().map(deviceRow).join('');
-    const people = (desktopInfo.people || []).map(function (person) {
+    const accountButton = function (id, username) {
+      return username
+        ? '<button class="text-button" data-person-password="' + escapeHtml(id) + '" type="button">' + icon('edit', 16) + ' Cambiar contraseña</button>'
+        : '<button class="text-button" data-person-invite="' + escapeHtml(id) + '" type="button">' + icon('plus', 16) + ' Crear invitación</button>';
+    };
+    const ownerRow = '<div class="person-row"><div class="person-head"><span class="person-avatar">' + icon('user', 17) + '</span><div><strong>Tú</strong><small>' + (desktopInfo.ownerAccount ? 'Usuario: ' + escapeHtml(desktopInfo.ownerAccount) : 'Sin usuario: crea una invitación para entrar desde otros dispositivos') + '</small></div></div>' +
+      '<div class="person-actions">' + accountButton('owner', desktopInfo.ownerAccount) + '</div></div>';
+    const people = ownerRow + (desktopInfo.people || []).map(function (person) {
       const own = desktopInfo.devices.filter(function (device) { return device.personId === person.id; });
-      return '<div class="person-row"><div class="person-head"><span class="person-avatar">' + escapeHtml(person.name.slice(0, 1).toLocaleUpperCase('es-CL')) + '</span><div><strong>' + escapeHtml(person.name) + '</strong><small>' + (own.length ? own.length + (own.length === 1 ? ' celular vinculado' : ' celulares vinculados') : 'Sin celular vinculado') + '</small></div>' +
-        '<button class="text-button" data-pair-person="' + escapeHtml(person.id) + '" type="button">' + icon('qr', 16) + ' Conectar celular</button><button class="icon-button person-remove" data-remove-person="' + escapeHtml(person.id) + '" type="button" aria-label="Eliminar a ' + escapeHtml(person.name) + '">' + icon('trash', 17) + '</button></div>' +
+      const devicesLabel = own.length ? own.length + (own.length === 1 ? ' dispositivo' : ' dispositivos') : 'sin dispositivos';
+      return '<div class="person-row"><div class="person-head"><span class="person-avatar">' + escapeHtml(person.name.slice(0, 1).toLocaleUpperCase('es-CL')) + '</span><div><strong>' + escapeHtml(person.name) + '</strong><small>' + (person.username ? 'Usuario: ' + escapeHtml(person.username) : 'Sin usuario') + ' · ' + devicesLabel + '</small></div>' +
+        '<button class="icon-button person-remove" data-remove-person="' + escapeHtml(person.id) + '" type="button" aria-label="Eliminar a ' + escapeHtml(person.name) + '">' + icon('trash', 17) + '</button></div>' +
+        '<div class="person-actions">' + accountButton(person.id, person.username) + '<button class="text-button" data-pair-person="' + escapeHtml(person.id) + '" type="button">' + icon('qr', 16) + ' Conectar con QR</button></div>' +
         own.map(deviceRow).join('') + '</div>';
     }).join('');
     return pageHeader('PREFERENCIAS', 'Ajustes', 'Tu dinero y tus dispositivos, bajo tu control.', '') +
@@ -941,14 +972,15 @@ function renderSettings() {
         '<div class="theme-options"><button type="button" data-theme-option="light" class="theme-option' + (data.theme === 'light' ? ' selected' : '') + '"><span class="theme-swatch light-swatch"></span><span><strong>Claro</strong><small>Blanco y verde menta</small></span>' + (data.theme === 'light' ? icon('check', 18) : '') + '</button>' +
         '<button type="button" data-theme-option="dark" class="theme-option' + (data.theme === 'dark' ? ' selected' : '') + '"><span class="theme-swatch dark-swatch"></span><span><strong>Oscuro</strong><small>Verde oscuro y contraste suave</small></span>' + (data.theme === 'dark' ? icon('check', 18) : '') + '</button></div></section>' +
       '<section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('wallet', 20) + '</span><div><h2>Saldo inicial</h2><p>' + money(data.openingBalance) + '</p></div></div><button class="setting-action" data-action="edit-opening-balance" type="button"><span>' + icon('edit', 18) + ' Cambiar saldo inicial</span>' + icon('arrowRight', 18) + '</button></section>' +
-      '<section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('phone', 20) + '</span><div><h2>Tu iPhone</h2><p>' + (DESKTOP ? 'Vincula y revoca dispositivos desde esta PC.' : 'Este celular está vinculado a tu PC.') + '</p></div></div>' +
+      '<section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('phone', 20) + '</span><div><h2>' + (DESKTOP ? 'Tu iPhone' : 'Este dispositivo') + '</h2><p>' + (DESKTOP ? 'Vincula y revoca dispositivos desde esta PC.' : 'Tiene tu sesión iniciada y quedó como dispositivo de confianza.') + '</p></div></div>' +
+        (DESKTOP ? '' : '<button class="setting-action" data-action="logout" type="button"><span>' + icon('close', 18) + ' Cerrar sesión en este dispositivo</span>' + icon('arrowRight', 18) + '</button>') +
         (DESKTOP ? '<button class="setting-action" data-action="show-qr" type="button"><span>' + icon('qr', 18) + ' Conectar iPhone con QR</span>' + icon('arrowRight', 18) + '</button>' + (devices || '<p class="settings-note">Todavía no hay celulares vinculados.</p>') : '') + '</section>' +
       (DESKTOP ? '<section class="panel settings-panel"><div class="settings-heading"><span class="settings-icon">' + icon('download', 20) + '</span><div><h2>Copias de seguridad</h2><p>Se guarda una copia local diaria cuando cambias datos.</p></div></div>' +
         '<button class="setting-action" data-action="export-data" type="button"><span>' + icon('download', 18) + ' Exportar mis datos</span>' + icon('arrowRight', 18) + '</button>' +
         '<button class="setting-action" data-action="restore-data" type="button"><span>' + icon('reset', 18) + ' Restaurar una copia</span>' + icon('arrowRight', 18) + '</button><input id="restore-file" type="file" accept=".json,application/json" hidden />' +
         '<p class="settings-note">Copias automáticas en ' + escapeHtml(desktopInfo.backupDir || 'la carpeta de datos de MiPlata') + '</p></section>' +
-      '<section class="panel settings-panel people-panel"><div class="settings-heading"><span class="settings-icon">' + icon('user', 20) + '</span><div><h2>Personas</h2><p>Cada persona ve solo sus propios gastos desde su celular.</p></div></div>' +
-        (people || '<p class="settings-note">Agrega a alguien de tu familia o a un amigo para que lleve sus gastos aquí, sin ver los tuyos.</p>') +
+      '<section class="panel settings-panel people-panel"><div class="settings-heading"><span class="settings-icon">' + icon('user', 20) + '</span><div><h2>Personas y cuentas</h2><p>Cada persona entra con su usuario y ve solo sus propios gastos.</p></div></div>' + people +
+        ((desktopInfo.people || []).length ? '' : '<p class="settings-note">Agrega a alguien de tu familia o a un amigo para que lleve sus gastos aquí, sin ver los tuyos.</p>') +
         '<button class="setting-action" data-action="add-person" type="button"><span>' + icon('plus', 18) + ' Agregar persona</span>' + icon('arrowRight', 18) + '</button></section>' : '') + '</div>';
   }
   return pageHeader('PREFERENCIAS', 'Ajustes', 'Personaliza esta vista previa y prueba el enlace con tu iPhone.', '') +
@@ -1303,6 +1335,8 @@ function renderModal() {
   if (modal.type === 'confirmation') return confirmationModal();
   if (modal.type === 'budget') return budgetModal();
   if (modal.type === 'person') return personModal();
+  if (modal.type === 'invite') return inviteModal();
+  if (modal.type === 'password') return passwordModal();
   if (modal.type === 'goal') return goalModal();
   if (modal.type === 'recurring') return recurringModal();
   return '';
@@ -1604,6 +1638,15 @@ document.addEventListener('click', function (event) {
   }
   const pairFor = event.target.closest('[data-pair-person]');
   if (pairFor && LIVE && DESKTOP) { pairPerson = pairFor.dataset.pairPerson; modal = { type: 'qr' }; pairingInfo = null; render(); startPairing(selectedNetwork); return; }
+  const invite = event.target.closest('[data-person-invite]');
+  if (invite && LIVE && DESKTOP) {
+    const personId = invite.dataset.personInvite;
+    const person = personId === 'owner' ? { name: 'ti' } : personById(personId);
+    apiPost('/api/invites', { personId: personId }).then(function (result) { modal = { type: 'invite', personId: personId, personName: person ? person.name : '', code: result.code, expiresAt: result.expiresAt }; render(); }).catch(function (error) { toast(error.message); });
+    return;
+  }
+  const passwordFor = event.target.closest('[data-person-password]');
+  if (passwordFor && LIVE && DESKTOP) { modal = { type: 'password', personId: passwordFor.dataset.personPassword }; render(); document.getElementById('new-password')?.focus(); return; }
   const removePerson = event.target.closest('[data-remove-person]');
   if (removePerson && LIVE && DESKTOP) { modal = { type: 'confirmation', action: 'remove-person', id: removePerson.dataset.removePerson }; render(); return; }
   const revoke = event.target.closest('[data-revoke-device]');
@@ -1637,6 +1680,12 @@ document.addEventListener('click', function (event) {
     case 'move-savings-category': if (modal && modal.id) openTransaction(null, modal.id); break;
     case 'add-category': modal = { type: 'category', id: null }; render(); break;
     case 'merge-concepts': modal = { type: 'merge-concepts', categoryId: selectedCategoryId }; render(); break;
+    case 'copy-invite':
+      if (modal && modal.code && navigator.clipboard) navigator.clipboard.writeText(modal.code).then(function () { toast('Código copiado'); }).catch(function () { toast('Copia el código manualmente'); });
+      break;
+    case 'logout':
+      if (LIVE && !DESKTOP) apiPost('/api/logout', {}).then(function () { window.location.replace('/'); }).catch(function (error) { toast(error.message); });
+      break;
     case 'add-person': if (LIVE && DESKTOP) { modal = { type: 'person' }; render(); document.getElementById('person-name')?.focus(); } break;
     case 'show-qr':
       pairPerson = 'owner'; modal = { type: 'qr' }; pairingInfo = null; pairingStep = 'start'; render();
@@ -1823,6 +1872,13 @@ document.addEventListener('submit', function (event) {
     });
     if (conceptFilter === source) conceptFilter = target;
     modal = null; saveData(); render(); toast('Nombres unidos');
+  } else if (event.target.id === 'password-form') {
+    event.preventDefault();
+    const form = new FormData(event.target);
+    const password = String(form.get('password') || '');
+    if (password.length < 8) { toast('La contraseña debe tener al menos 8 caracteres'); return; }
+    if (password !== String(form.get('password2') || '')) { toast('Las contraseñas no coinciden'); return; }
+    apiPost('/api/people/password', { personId: modal.personId, password: password }).then(function () { modal = null; render(); toast('Contraseña cambiada'); }).catch(function (error) { toast(error.message); });
   } else if (event.target.id === 'person-form') {
     event.preventDefault();
     const name = String(new FormData(event.target).get('name') || '').trim();

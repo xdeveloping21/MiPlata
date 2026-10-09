@@ -131,6 +131,43 @@ function validPersonId(value) {
   return typeof value === 'string' && /^p[A-Za-z0-9_-]{8,40}$/.test(value);
 }
 
+const INVITE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const INVITE_MS = 7 * 24 * 60 * 60 * 1000;
+
+function cleanUsername(value) {
+  const username = String(value || '').trim().toLowerCase();
+  if (!/^[a-z0-9._-]{3,30}$/.test(username)) throw new Error('El usuario debe tener entre 3 y 30 letras, números, puntos o guiones, sin espacios');
+  return username;
+}
+
+function checkPassword(value) {
+  if (typeof value !== 'string' || value.length < 8 || value.length > 200) throw new Error('La contraseña debe tener al menos 8 caracteres');
+  return value;
+}
+
+// scrypt con sal aleatoria: la contraseña nunca se guarda tal cual.
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16);
+  const hash = crypto.scryptSync(password, salt, 32);
+  return 'scrypt$' + salt.toString('base64url') + '$' + hash.toString('base64url');
+}
+
+function passwordMatches(password, stored) {
+  const [kind, salt, hash] = String(stored || '').split('$');
+  if (kind !== 'scrypt' || !salt || !hash) return false;
+  const expected = Buffer.from(hash, 'base64url');
+  const actual = crypto.scryptSync(String(password), Buffer.from(salt, 'base64url'), expected.length);
+  return crypto.timingSafeEqual(actual, expected);
+}
+
+function normalizeInvite(value) {
+  return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function hashInvite(code) {
+  return crypto.createHash('sha256').update(normalizeInvite(code)).digest('hex');
+}
+
 function cleanPersonName(value) {
   const name = String(value || '').replace(/\s+/g, ' ').trim();
   if (!name || name.length > 40) throw new Error('Escribe un nombre de hasta 40 caracteres');
@@ -157,6 +194,8 @@ async function openStore(userDataPath, initialStatePath) {
   db.run('CREATE TABLE IF NOT EXISTS people (id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at TEXT NOT NULL)');
   db.run('CREATE TABLE IF NOT EXISTS person_state (person_id TEXT PRIMARY KEY, revision INTEGER NOT NULL, payload TEXT NOT NULL)');
   db.run('CREATE TABLE IF NOT EXISTS person_rules (person_id TEXT NOT NULL, merchant_key TEXT NOT NULL, merchant TEXT NOT NULL, category_id TEXT NOT NULL, PRIMARY KEY (person_id, merchant_key))');
+  db.run('CREATE TABLE IF NOT EXISTS accounts (person_id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, created_at TEXT NOT NULL)');
+  db.run('CREATE TABLE IF NOT EXISTS invites (code_hash TEXT PRIMARY KEY, person_id TEXT NOT NULL, expires_at INTEGER NOT NULL)');
   const deviceColumns = db.exec('PRAGMA table_info(devices)')[0].values.map((row) => row[1]);
   if (!deviceColumns.includes('person_id')) db.run("ALTER TABLE devices ADD COLUMN person_id TEXT NOT NULL DEFAULT 'owner'");
 
@@ -358,7 +397,7 @@ async function openStore(userDataPath, initialStatePath) {
   }
 
   function listPeople() {
-    return all('SELECT id, name, created_at FROM people ORDER BY created_at').map(([id, name, createdAt]) => ({ id, name, createdAt }));
+    return all('SELECT people.id, people.name, people.created_at, accounts.username FROM people LEFT JOIN accounts ON accounts.person_id = people.id ORDER BY people.created_at').map(([id, name, createdAt, username]) => ({ id, name, createdAt, username: username || null }));
   }
 
   function addPerson(name) {
@@ -381,10 +420,64 @@ async function openStore(userDataPath, initialStatePath) {
       db.run('DELETE FROM person_rules WHERE person_id = ?', [id]);
       db.run('DELETE FROM person_state WHERE person_id = ?', [id]);
       db.run('DELETE FROM people WHERE id = ?', [id]);
+      db.run('DELETE FROM accounts WHERE person_id = ?', [id]);
+      db.run('DELETE FROM invites WHERE person_id = ?', [id]);
       db.run('COMMIT');
     } catch (error) { db.run('ROLLBACK'); throw error; }
     persist();
     fs.rmSync(path.join(peopleDir, id), { recursive: true, force: true });
+  }
+
+  function accountFor(personId) {
+    return one('SELECT username, created_at FROM accounts WHERE person_id = ?', [personId]);
+  }
+
+  // Código de un solo uso para que una persona (o el dueño) cree su usuario y contraseña.
+  function createInvite(personId) {
+    if (!personExists(personId)) throw new Error('Persona no encontrada');
+    if (accountFor(personId)) throw new Error('Esta persona ya tiene usuario. Si olvidó la contraseña, cámbiala desde aquí.');
+    const bytes = crypto.randomBytes(8);
+    const raw = Array.from(bytes, (byte) => INVITE_ALPHABET[byte % INVITE_ALPHABET.length]).join('');
+    const expiresAt = Date.now() + INVITE_MS;
+    db.run('DELETE FROM invites WHERE person_id = ? OR expires_at < ?', [personId, Date.now()]);
+    db.run('INSERT INTO invites (code_hash, person_id, expires_at) VALUES (?, ?, ?)', [hashInvite(raw), personId, expiresAt]);
+    persist();
+    return { code: raw.slice(0, 4) + '-' + raw.slice(4), expiresAt };
+  }
+
+  function registerAccount(code, username, password) {
+    const invite = one('SELECT person_id, expires_at FROM invites WHERE code_hash = ?', [hashInvite(code)]);
+    if (!invite || Number(invite.expires_at) < Date.now() || !personExists(invite.person_id)) throw new Error('El código de invitación no es válido o ya venció');
+    const cleanName = cleanUsername(username);
+    checkPassword(password);
+    if (accountFor(invite.person_id)) throw new Error('Esta persona ya tiene usuario');
+    if (one('SELECT person_id FROM accounts WHERE username = ?', [cleanName])) throw new Error('Ese usuario ya existe. Elige otro.');
+    db.run('BEGIN TRANSACTION');
+    try {
+      db.run('INSERT INTO accounts (person_id, username, password_hash, created_at) VALUES (?, ?, ?, ?)', [invite.person_id, cleanName, hashPassword(password), new Date().toISOString()]);
+      db.run('DELETE FROM invites WHERE person_id = ?', [invite.person_id]);
+      db.run('COMMIT');
+    } catch (error) { db.run('ROLLBACK'); throw error; }
+    persist();
+    return invite.person_id;
+  }
+
+  function verifyLogin(username, password) {
+    let cleanName;
+    try { cleanName = cleanUsername(username); } catch (error) { return null; }
+    const account = one('SELECT person_id, password_hash FROM accounts WHERE username = ?', [cleanName]);
+    if (!account) {
+      passwordMatches(password, hashPassword('relleno-para-igualar-el-tiempo'));
+      return null;
+    }
+    return passwordMatches(password, account.password_hash) && personExists(account.person_id) ? account.person_id : null;
+  }
+
+  function setPassword(personId, password) {
+    checkPassword(password);
+    if (!accountFor(personId)) throw new Error('Esta persona todavía no tiene usuario');
+    db.run('UPDATE accounts SET password_hash = ? WHERE person_id = ?', [hashPassword(password), personId]);
+    persist();
   }
 
   function personName(id) {
@@ -426,7 +519,7 @@ async function openStore(userDataPath, initialStatePath) {
     persist();
   }
 
-  return { ...ownerScope, forPerson: scope, listPeople, addPerson, removePerson, personName, addDevice, deviceForToken, listDevices, revokeDevice, lastBackupAt, backupDir, dbPath, backupNow, close: () => db.close() };
+  return { ...ownerScope, forPerson: scope, listPeople, addPerson, removePerson, personName, accountFor, createInvite, registerAccount, verifyLogin, setPassword, addDevice, deviceForToken, listDevices, revokeDevice, lastBackupAt, backupDir, dbPath, backupNow, close: () => db.close() };
 }
 
 module.exports = { openStore, validateState, OWNER };

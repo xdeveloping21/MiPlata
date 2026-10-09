@@ -112,13 +112,18 @@ Cada persona tiene sus propios gastos, categorías, ahorros, boletas y documento
 2. Tú entras al panel de Tailscale (<https://login.tailscale.com/admin/machines>), buscas la máquina **MiPlata**, abres el menú **⋯** y eliges **Share…**.
 3. Le envías la invitación por correo o el enlace. Cuando la acepte, la VPS aparecerá en su Tailscale con la misma dirección (`http://100.x.x.x:4174`). Solo verá esa máquina, no tu PC ni tu iPhone.
 
-**Crear su espacio en MiPlata:**
+**Crear su cuenta en MiPlata:**
 
-1. En la PC, con el túnel del paso 5, abre <http://localhost:4174> y ve a **Ajustes → Personas → Agregar persona**.
-2. Escribe su nombre y presiona **Conectar celular** junto a él. Elige la red **Tailscale**.
-3. La persona escanea el QR con su celular, y tú apruebas la solicitud en la PC. En su celular aparecerá su nombre junto al logo de MiPlata.
+1. En la PC, con el túnel del paso 5, abre <http://localhost:4174> y ve a **Ajustes → Personas y cuentas → Agregar persona**.
+2. Escribe su nombre y presiona **Crear invitación** junto a él. Aparece un código como `K7M2-P9QX`, que sirve una sola vez y vence en 7 días.
+3. Envíale ese código. La persona abre `http://100.x.x.x:4174` en su celular, toca **¿Tienes un código de invitación?**, escribe el código y elige su usuario y contraseña.
+4. Su dispositivo queda como de confianza: no se le vuelve a pedir la contraseña. En otro dispositivo, entra con el mismo usuario y contraseña.
 
-Si eliminas a una persona en **Ajustes → Personas**, se borran sus gastos, boletas y documentos, y su celular pierde el acceso.
+Tú también puedes crear tu usuario: en la fila **Tú**, presiona **Crear invitación** y úsala en tu iPhone. Así no necesitas el QR.
+
+Si alguien olvida su contraseña, presiona **Cambiar contraseña** junto a su nombre y escribe una nueva. Después de 5 intentos fallidos, MiPlata bloquea los intentos durante 15 minutos.
+
+El QR (**Conectar con QR**) sigue disponible como alternativa. Si eliminas a una persona, se borran sus gastos, boletas y documentos, y sus dispositivos pierden el acceso.
 
 ## Actualizar MiPlata
 
