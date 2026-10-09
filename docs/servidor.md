@@ -22,6 +22,12 @@ ssh root@IP_DE_LA_VPS
 
 La primera vez te preguntará si confías en el servidor: escribe `yes`.
 
+Si elegiste la imagen "Minimal" de Ubuntu, instala primero dos herramientas que no trae:
+
+```bash
+apt update && apt install -y git curl
+```
+
 ## 2. Unir la VPS a Tailscale
 
 Dentro de la VPS:
